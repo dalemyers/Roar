@@ -10,3 +10,11 @@ build
 # xcodegen-generated file (source of truth is project.yml info.properties)
 Resources/Info.plist
 Roar.xcodeproj
+
+# MkDocs / Read the Docs build artifacts. The rendered HTML is
+# never committed — RTD rebuilds from source on every push. A
+# local `mkdocs build` produces `site/`; a local preview venv
+# produces `.docs-venv/`. Both are reproducible from
+# `docs/requirements.txt`.
+site/
+.docs-venv/

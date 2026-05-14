@@ -2,8 +2,8 @@
 
 This document is for **contributors and people who want to hack on
 Roar**. If you just want to use the tool, install via Homebrew —
-see the [README](../README.md#install) for `brew install --cask
-dalemyers/tap/roar` and friends.
+see the [README](https://github.com/dalemyers/Roar#install) for
+`brew install --cask dalemyers/tap/roar` and friends.
 
 ## Requirements
 
@@ -110,5 +110,5 @@ Local builds default to ad-hoc signing (`CODE_SIGN_IDENTITY = "-"`),
 which works for testing but won't pass Gatekeeper on someone else's
 machine. The Developer ID + notarisation pipeline runs from CI on
 every `v*` tag push — see the
-[`CI / release` section of the README](../README.md#ci--release) for
+[`CI / release` section of the README](https://github.com/dalemyers/Roar#ci--release) for
 the secret provisioning and tag workflow.

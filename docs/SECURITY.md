@@ -183,8 +183,9 @@ Roar also rejects:
   time so it can't slip into the userInfo blob and confuse the
   click-time deserialiser.
 
-Source: [`Sources/URLValidation.swift`](../Sources/URLValidation.swift),
-[`Sources/ClickSideEffects.swift`](../Sources/ClickSideEffects.swift).
+Source:
+[`Sources/URLValidation.swift`](https://github.com/dalemyers/Roar/blob/main/Sources/URLValidation.swift),
+[`Sources/ClickSideEffects.swift`](https://github.com/dalemyers/Roar/blob/main/Sources/ClickSideEffects.swift).
 
 ### 2. Shell-on-click consent gate (`--exec`)
 
@@ -290,7 +291,7 @@ intermediary (extra disk write, not worth the cost for this tier).
 The walk turns "passive pre-staging works" into "an active race is
 required," which is a meaningful upgrade.
 
-Source: [`Sources/Commands/SendAttachment.swift`](../Sources/Commands/SendAttachment.swift).
+Source: [`Sources/Commands/SendAttachment.swift`](https://github.com/dalemyers/Roar/blob/main/Sources/Commands/SendAttachment.swift).
 
 ### 5. Control-character / NUL screening
 

@@ -1,0 +1,110 @@
+# MkDocs site config for Roar's documentation.
+#
+# Rendered by Read the Docs from `.readthedocs.yaml` on every push
+# to `main` and on every tag. The source of truth for narrative
+# docs is the `docs/` directory; the README's content is mirrored
+# in `docs/index.md` so the homepage of the docs site is a tight
+# version of the README's opening sections (install, exit codes,
+# threat model) without duplicating every word.
+#
+# Theme is Material — markdown-native, ships with code-block
+# highlighting, copy-to-clipboard buttons, search, and a
+# light/dark toggle out of the box. No Python authoring; the
+# docs themselves stay plain `.md` so they remain readable on
+# GitHub and inside an editor.
+
+site_name: Roar
+site_description: Send macOS user notifications from the command line.
+site_author: Dale Myers
+site_url: https://roar.readthedocs.io/
+
+# Source repo link in the header. RTD picks up the GitHub icon
+# automatically when the URL host is github.com.
+repo_url: https://github.com/dalemyers/Roar
+repo_name: dalemyers/Roar
+
+# `edit_uri` lets each rendered page link to its source on GitHub
+# (`docs/COOKBOOK.md` → "Edit this page" → GH editor). Points at
+# the `main` branch's `docs/` directory.
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  # Light / dark scheme toggle in the top bar. `slate` is
+  # Material's dark scheme; default colours match the rest of
+  # the Material theme.
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    # Sticky nav tabs at the top — top-level sections always
+    # visible while scrolling deep into one section.
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking      # URL fragment updates as user scrolls
+    - search.highlight
+    - search.share
+    - content.code.copy        # copy-to-clipboard on every fenced block
+    - content.code.annotate    # inline annotations on code blocks
+    - content.action.edit      # "Edit this page" buttons
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  # Standard syntax-highlighting + better fenced-code handling.
+  # pymdownx.superfences is what lets us nest code in admonitions
+  # and tabs without quirky escaping.
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  # Admonition + tabbed blocks — not used in the current docs
+  # but enabled so future writers can drop them in without
+  # touching the config.
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  # Auto-link bare URLs.
+  - pymdownx.magiclink
+  # Auto-generated table of contents per page with permalink anchors.
+  - toc:
+      permalink: true
+  # Footnote support, task lists.
+  - footnotes
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  # Tables (already standard but explicit for clarity).
+  - tables
+
+# Site navigation. The order here is the order tabs appear in
+# the header. Each entry maps a label to a docs/ file path.
+# Section names with no file group children into a dropdown
+# (e.g. "Reference" below).
+nav:
+  - Home: index.md
+  - Cookbook: COOKBOOK.md
+  - Scripting: SCRIPTING.md
+  - Security: SECURITY.md
+  - Troubleshooting: TROUBLESHOOTING.md
+  - Build from source: BUILD.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dalemyers/Roar
+      name: Roar on GitHub

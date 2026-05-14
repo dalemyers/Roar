@@ -1,0 +1,28 @@
+# Pinned dependencies for the Read the Docs build.
+#
+# Read the Docs invokes `mkdocs build` against the project's
+# `mkdocs.yml`; this file pins the exact versions used so a
+# transitive upstream change can't silently alter the rendered
+# site between RTD rebuilds. Bump deliberately as part of a doc
+# rebuild, not as a side effect of an unrelated dependency
+# refresh.
+#
+# Used by both RTD (per `.readthedocs.yaml`) and anyone who wants
+# to preview the site locally:
+#
+#     python -m venv .venv
+#     source .venv/bin/activate
+#     pip install -r docs/requirements.txt
+#     mkdocs serve   # http://127.0.0.1:8000
+
+# Core. `~=` allows patch-level updates (1.6.x) but not minor
+# version bumps that could introduce config-level changes.
+mkdocs~=1.6.0
+mkdocs-material~=9.5.0
+
+# pymdownx is the extensions bundle that powers code-block
+# highlighting, tabbed blocks, magic links, etc. — referenced
+# under `markdown_extensions:` in `mkdocs.yml`. Bundled as a
+# direct dep so its version is explicit; Material would pull it
+# in transitively anyway.
+pymdown-extensions~=10.7

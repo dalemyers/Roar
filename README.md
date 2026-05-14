@@ -2,6 +2,7 @@
 
 [![CI](../../actions/workflows/ci.yml/badge.svg?branch=main)](../../actions/workflows/ci.yml)
 [![Nightly](../../actions/workflows/nightly.yml/badge.svg)](../../actions/workflows/nightly.yml)
+[![Docs](https://readthedocs.org/projects/roar/badge/?version=latest)](https://roar.readthedocs.io/)
 
 A CLI for posting macOS notifications from the shell, with optional
 click handlers (open a URL, run a shell command, activate an app),
@@ -33,6 +34,11 @@ exhaustive help text. Once the man page is installed (see [Build](#build)),
 `man roar` is the full reference.
 
 ### Deeper docs
+
+The narrative documentation is rendered at
+**[roar.readthedocs.io](https://roar.readthedocs.io/)** —
+searchable, with light/dark theme toggle and per-page edit links
+back here. The source lives in `docs/`:
 
 - [`docs/BUILD.md`](docs/BUILD.md) — build from source: requirements,
   the `xcodegen` + `xcodebuild` flow, testing, lint, installing a

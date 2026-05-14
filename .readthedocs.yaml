@@ -1,0 +1,47 @@
+# Read the Docs configuration.
+#
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for
+# the full schema. This file is read by RTD on every push to a
+# branch that has documentation builds enabled in the RTD project
+# UI (typically `main` + every tagged version).
+#
+# The doc generator is MkDocs with the Material theme. All content
+# lives in `docs/` as plain markdown — no Sphinx, no RST, no API
+# autodoc. The repo's narrative documentation
+# (`docs/BUILD.md`, `docs/COOKBOOK.md`, `docs/SCRIPTING.md`,
+# `docs/SECURITY.md`, `docs/TROUBLESHOOTING.md`) becomes the site
+# nav; `docs/index.md` is a thin landing page that links into them.
+
+version: 2
+
+build:
+  # `ubuntu-24.04` is the current RTD long-term-support image and
+  # provides a Python 3.x that mkdocs-material 9 supports. RTD
+  # rolls these images forward periodically; pinning explicitly
+  # documents the assumption.
+  os: ubuntu-24.04
+  tools:
+    # Python 3.12 is the highest mkdocs-material 9.x tests
+    # against. Bumping to a newer Python is fine if the
+    # dependency set follows.
+    python: "3.12"
+
+mkdocs:
+  # `mkdocs.yml` lives at the repo root. RTD invokes
+  # `mkdocs build` against this file.
+  configuration: mkdocs.yml
+
+python:
+  install:
+    # Pinned dependency list — see `docs/requirements.txt`. The
+    # file pins mkdocs + mkdocs-material to known-good versions
+    # so a transitive bump doesn't silently change the rendered
+    # site's appearance.
+    - requirements: docs/requirements.txt
+
+# RTD's "formats" controls whether downloadable PDF / ePub copies
+# of the docs are produced alongside the HTML site. The narrative
+# docs are reference material that's best read online (with
+# syntax-highlighted code blocks and live links); skip the
+# offline formats unless someone asks.
+formats: []
