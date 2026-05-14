@@ -1,5 +1,47 @@
 import ArgumentParser
+import Darwin
 import Foundation
+
+/// Locate the `.app` bundle containing the running executable,
+/// resolving any symlinks first.
+///
+/// `Bundle.main` derives its path from `_NSGetExecutablePath`,
+/// which returns the argv-style path the kernel was handed at
+/// `execve` time. When the binary is invoked via a symlink — the
+/// Homebrew install path puts a symlink at
+/// `/opt/homebrew/bin/roar` pointing inside the .app —
+/// `Bundle.main`'s bundle URL is the symlink's parent directory
+/// (`/opt/homebrew/bin/`), NOT the .app. Reading Info.plist keys
+/// from `Bundle.main.infoDictionary` then returns nil and the
+/// version string degrades to "unknown (unknown)".
+///
+/// Fix: resolve the executable path's symlink chain, walk three
+/// levels up (MacOS/ → Contents/ → Roar.app), and construct a
+/// `Bundle` from that real path. Falls back to `Bundle.main` on
+/// any failure — the worst case is the same "unknown (unknown)"
+/// display we'd have without the fix.
+///
+/// The resolved path is computed once and cached at module load.
+/// Successive calls reuse the same Bundle reference.
+private let roarBundle: Bundle = {
+    var pathBuf = [CChar](repeating: 0, count: Int(PATH_MAX))
+    var pathLen = UInt32(pathBuf.count)
+    guard _NSGetExecutablePath(&pathBuf, &pathLen) == 0 else {
+        return Bundle.main
+    }
+    let exeURL = URL(fileURLWithPath: String(cString: pathBuf))
+        .resolvingSymlinksInPath()
+    // Walk: MacOS/<binary> → Contents/MacOS → Contents → .app
+    let appURL = exeURL
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    guard appURL.pathExtension == "app",
+          let bundle = Bundle(url: appURL) else {
+        return Bundle.main
+    }
+    return bundle
+}()
 
 /// Top-level `roar` command. Subcommands are wired here.
 ///
@@ -33,7 +75,7 @@ struct Roar: AsyncParsableCommand {
         // local builds remains comparable. Dev output looks
         // like `0.0.0 (202605142230)`, immediately visually
         // distinct from a CI release.
-        let info = Bundle.main.infoDictionary
+        let info = roarBundle.infoDictionary
         let marketing = info?["CFBundleShortVersionString"] as? String ?? "unknown"
         let rawBuild = info?["CFBundleVersion"] as? String ?? "unknown"
         let buildLabel: String = {
@@ -46,8 +88,11 @@ struct Roar: AsyncParsableCommand {
             // the same metadata `ls -l` shows; the binary's
             // mtime is set at link time, so this changes once
             // per build and stays stable across multiple
-            // invocations of the same build.
-            let exePath = Bundle.main.executableURL?.path
+            // invocations of the same build. Use the
+            // symlink-resolved executable from `roarBundle` so
+            // the lookup doesn't get a stale Homebrew-symlink
+            // mtime when invoked via `/opt/homebrew/bin/roar`.
+            let exePath = roarBundle.executableURL?.path
             let attrs = exePath.flatMap {
                 try? FileManager.default.attributesOfItem(atPath: $0)
             }
