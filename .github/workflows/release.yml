@@ -243,16 +243,42 @@ jobs:
             build/release/roar.app \
             build/release/roar.app.zip
 
-          # `--wait` blocks until Apple's service finishes; the
-          # exit code is non-zero on rejection so the workflow
-          # fails fast. Output is also captured into the log for
-          # diagnostic purposes.
-          xcrun notarytool submit \
+          # `--wait` blocks until Apple's service returns a terminal
+          # status (Accepted | Invalid | Rejected). IMPORTANT:
+          # `notarytool submit --wait` exits 0 even when the status
+          # is Invalid — the documented contract is "did the
+          # submission round-trip cleanly," not "was the binary
+          # accepted." A previous version of this step assumed the
+          # exit code was the verdict and silently proceeded to a
+          # doomed `stapler staple` (which fails with exit 65 when
+          # there's no ticket to staple). Capture the JSON output,
+          # check the status field explicitly, and pull the detailed
+          # rejection log when the status isn't Accepted.
+          SUBMIT_OUT=$(xcrun notarytool submit \
             build/release/roar.app.zip \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --wait
+            --wait \
+            --output-format json)
+          echo "$SUBMIT_OUT"
+
+          STATUS=$(echo "$SUBMIT_OUT" | python3 -c "import json, sys; print(json.load(sys.stdin).get('status', ''))")
+          SUBMISSION_ID=$(echo "$SUBMIT_OUT" | python3 -c "import json, sys; print(json.load(sys.stdin).get('id', ''))")
+
+          if [[ "$STATUS" != "Accepted" ]]; then
+            echo "::error::Notarisation status is '${STATUS}' for submission ${SUBMISSION_ID}; expected 'Accepted'."
+            echo "Fetching detailed log from Apple's notary service..."
+            # The log call is best-effort — if it fails the workflow
+            # still has to exit non-zero, but we don't want a log
+            # fetch error to mask the underlying notarisation
+            # failure with a different exit code.
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" || true
+            exit 1
+          fi
 
           # Staple the notarisation ticket onto the .app so
           # Gatekeeper can validate the build OFFLINE (without
