@@ -433,24 +433,25 @@ jobs:
           # Stage the tap update under build/ so the checkout
           # doesn't conflict with the source repo's working tree.
           #
-          # The token is passed via `http.extraheader` rather than
-          # the conventional `https://x-access-token:$TOKEN@host`
-          # URL form. GitHub Actions auto-masks known secrets in
-          # logs, but the masking is best-effort (a URL-encoded
-          # or otherwise-transformed copy of the token wouldn't
-          # always match), and tokens-in-URLs land in places
-          # masking can't reach: `git remote -v` output, the
-          # process table during the clone, error messages from
-          # `git` that print the remote URL verbatim. The bearer-
-          # header form keeps the token off the URL entirely; the
-          # `-c http.extraheader=` flag is consumed by git and
-          # not stored in the cloned repo's config, so subsequent
-          # `git push` calls below need their own `-c` flag.
+          # Authentication uses `gh auth setup-git` rather than a
+          # raw `http.extraheader` Bearer-auth scheme. GitHub's
+          # git-over-HTTPS endpoint expects Basic auth (or the
+          # `gh` credential helper) for fine-grained PATs; the
+          # Bearer-header form works for the REST API but is not
+          # honoured by the git endpoint, producing `fatal: could
+          # not read Username for 'https://github.com'` when git
+          # falls back to interactive auth on the runner. The
+          # `gh auth login --with-token` + `gh auth setup-git`
+          # pair installs `gh` as a git credential helper that
+          # serves the same token over the GitHub-blessed channel.
+          # The token still never appears in any URL or
+          # `git remote -v` output; it lives in `gh`'s config
+          # under the runner's home dir, cleaned up at job end.
+          echo "$HOMEBREW_TAP_TOKEN" | gh auth login --with-token
+          gh auth setup-git
+
           TAP_DIR="build/homebrew-tap"
-          AUTH_HEADER="Authorization: bearer $HOMEBREW_TAP_TOKEN"
-          git -c http.extraheader="$AUTH_HEADER" clone \
-            https://github.com/dalemyers/homebrew-tap.git \
-            "$TAP_DIR"
+          git clone https://github.com/dalemyers/homebrew-tap.git "$TAP_DIR"
 
           # Branch named for the version so consecutive releases
           # don't collide on a single open PR.
@@ -489,11 +490,11 @@ jobs:
             git add Casks/roar.rb
             git commit -m "Bump roar to $VERSION"
             # `--force-with-lease` keeps us from clobbering a
-            # concurrent edit to the same branch on the tap; the
-            # bearer header is re-supplied here because the clone
-            # above did not persist it into the repo config.
-            git -c http.extraheader="$AUTH_HEADER" \
-              push --force-with-lease origin "$BRANCH"
+            # concurrent edit to the same branch on the tap.
+            # Auth flows through the `gh`-installed credential
+            # helper configured above — no per-command flags
+            # needed.
+            git push --force-with-lease origin "$BRANCH"
           )
 
           # Open the PR via the GitHub API. Using `gh` directly
@@ -513,7 +514,7 @@ jobs:
           Sourced from \`homebrew-tap/Casks/roar.rb\` in the source repo.
           EOF
           )
-          GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh pr create \
+          gh pr create \
             --repo dalemyers/homebrew-tap \
             --head "$BRANCH" \
             --base main \
