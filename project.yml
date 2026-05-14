@@ -60,8 +60,18 @@ targets:
         CFBundleIdentifier: io.myers.roar
         CFBundleName: Roar
         CFBundleExecutable: $(EXECUTABLE_NAME)
-        CFBundleShortVersionString: "3.0.0"
-        CFBundleVersion: "16"
+        # `$(MARKETING_VERSION)` is substituted by xcodebuild at
+        # build time from the `MARKETING_VERSION` build setting
+        # below. The release workflow overrides
+        # `MARKETING_VERSION` from the git tag (`v0.1.7` →
+        # `0.1.7`); local dev builds get the `0.0.0` default so
+        # `roar --version` clearly says "not a release". The Swift
+        # CLI reads this same Info.plist value via
+        # `Bundle.main.object(forInfoDictionaryKey:)` so the
+        # `--version` flag, the bundle, the git tag, and the
+        # Homebrew cask all agree.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleIconFile: Roar
         CFBundlePackageType: APPL
         CFBundleInfoDictionaryVersion: "6.0"
@@ -76,6 +86,15 @@ targets:
       base:
         PRODUCT_NAME: roar
         PRODUCT_BUNDLE_IDENTIFIER: io.myers.roar
+        # Version source of truth. CI release builds override
+        # `MARKETING_VERSION` from the git tag (`v0.1.7` →
+        # `0.1.7`); CURRENT_PROJECT_VERSION (the build number) is
+        # overridden similarly via the release run's GITHUB_RUN_NUMBER
+        # or left at the dev default. The Info.plist's
+        # CFBundleShortVersionString / CFBundleVersion both
+        # reference these via the standard `$(NAME)` placeholder.
+        MARKETING_VERSION: "0.0.0"
+        CURRENT_PROJECT_VERSION: "0"
         SWIFT_VERSION: "5.10"
         MACOSX_DEPLOYMENT_TARGET: "13.0"
         ENABLE_HARDENED_RUNTIME: YES

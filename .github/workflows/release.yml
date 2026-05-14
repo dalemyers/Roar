@@ -208,6 +208,16 @@ jobs:
           # pass it through to every codesign invocation in the
           # build, including the per-arch slice signing and the
           # final bundle re-sign.
+          #
+          # `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` are
+          # overridden from the git tag + the workflow run number
+          # so the bundle's Info.plist (and therefore
+          # `roar --version`, which reads it via
+          # `Bundle.main`) matches the GitHub release tag and the
+          # Homebrew cask version. `project.yml` declares
+          # `0.0.0` / `0` defaults that local dev builds inherit;
+          # CI release builds always override them here.
+          VERSION="${RELEASE_TAG#v}"
           xcodebuild \
             -project Roar.xcodeproj \
             -scheme roar \
@@ -219,6 +229,8 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_ENTITLEMENTS=Resources/roar.entitlements \
             OTHER_CODE_SIGN_FLAGS="--timestamp" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER:-0}" \
             build
 
           # The built .app lands at a well-known location under
