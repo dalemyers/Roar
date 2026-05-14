@@ -16,7 +16,7 @@
 site_name: Roar
 site_description: Send macOS user notifications from the command line.
 site_author: Dale Myers
-site_url: https://roar.readthedocs.io/
+site_url: https://roarcli.readthedocs.io/
 
 # Source repo link in the header. RTD picks up the GitHub icon
 # automatically when the URL host is github.com.
