@@ -73,10 +73,16 @@ jobs:
       - name: Run SwiftLint
         # `--reporter github-actions-logging` turns each violation
         # into a `::warning::` / `::error::` annotation that the
-        # GitHub PR UI surfaces inline on the diff. The `.swiftlint.yml`
-        # already encodes which rules are errors vs warnings; only
-        # errors fail the job, by design (see config comments).
-        run: swiftlint --reporter github-actions-logging
+        # GitHub PR UI surfaces inline on the diff.
+        #
+        # `--strict` promotes every warning to an error so the job
+        # fails on any lint regression — the project's policy is
+        # that warnings ARE errors. Sites that legitimately need a
+        # pattern the linter flags (XCTestCase IUO fixtures, etc.)
+        # use inline `// swiftlint:disable:this <rule>` annotations
+        # with rationale comments rather than letting warnings
+        # accumulate.
+        run: swiftlint --strict --reporter github-actions-logging
 
   test:
     name: Build & test

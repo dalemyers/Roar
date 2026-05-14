@@ -22,7 +22,15 @@ import ArgumentParser
 /// deferred from this wave.
 final class AttachmentExistenceTests: XCTestCase {
 
-    private var tempDir: URL!
+    // Conventional XCTestCase fixture: assigned in `setUpWithError`
+    // and consumed by every test method. An `Optional` would force
+    // `try XCTUnwrap(self.tempDir)` at every call site for no
+    // semantic gain — XCTest enforces the lifecycle. The
+    // `implicitly_unwrapped_optional` lint fires on every
+    // XCTestCase fixture; annotated here rather than globally
+    // disabled so production code (which has no such convention)
+    // still trips on the rule.
+    private var tempDir: URL! // swiftlint:disable:this implicitly_unwrapped_optional
 
     override func setUpWithError() throws {
         try super.setUpWithError()

@@ -7,7 +7,9 @@ import ArgumentParser
 /// depending on actual stdin.
 final class ReadCappedTests: XCTestCase {
 
-    private var pipe: Pipe!
+    // XCTestCase fixture assigned in `setUpWithError`. See
+    // `AttachmentExistenceTests` for the disable rationale.
+    private var pipe: Pipe! // swiftlint:disable:this implicitly_unwrapped_optional
 
     override func setUp() {
         super.setUp()

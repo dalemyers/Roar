@@ -186,10 +186,18 @@ final class ClearOrchestrationTests: XCTestCase {
         XCTAssertFalse(fake.calls.contains(.removeAllPending),
                        "--delivered scope must not touch pending")
         // Prune ran AFTER the clear.
-        let deliveredIdx = fake.calls.firstIndex(of: .removeAllDelivered)!
-        let fetchIdx = fake.calls.firstIndex(of: .fetchCategories)!
-        XCTAssertLessThan(deliveredIdx, fetchIdx,
-                          "Prune must run AFTER the clear so references reflect post-clear state")
+        let deliveredIdx = try XCTUnwrap(
+            fake.calls.firstIndex(of: .removeAllDelivered),
+            "Expected removeAllDelivered to be called; got \(fake.calls)"
+        )
+        let fetchIdx = try XCTUnwrap(
+            fake.calls.firstIndex(of: .fetchCategories),
+            "Expected fetchCategories to be called; got \(fake.calls)"
+        )
+        XCTAssertLessThan(
+            deliveredIdx, fetchIdx,
+            "Prune must run AFTER the clear so references reflect post-clear state"
+        )
     }
 
     /// The mutual-exclusion guard. `--delivered`, `--pending`, and

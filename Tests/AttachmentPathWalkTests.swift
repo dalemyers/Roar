@@ -19,7 +19,9 @@ import ArgumentParser
 /// non-existent component, root, and empty.
 final class AttachmentPathWalkTests: XCTestCase {
 
-    private var tempDir: URL!
+    // XCTestCase fixture assigned in `setUpWithError`. See
+    // `AttachmentExistenceTests` for the disable rationale.
+    private var tempDir: URL! // swiftlint:disable:this implicitly_unwrapped_optional
 
     override func setUpWithError() throws {
         try super.setUpWithError()

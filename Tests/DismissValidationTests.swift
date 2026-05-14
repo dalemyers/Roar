@@ -122,16 +122,24 @@ final class DismissValidationTests: XCTestCase {
             fake.calls.contains(.fetchPending),
             "Expected pending snapshot; got \(fake.calls)"
         )
-        let removeDeliveredIdx = fake.calls.firstIndex(
-            of: .removeDelivered(["abc", "def"]))
-        let removePendingIdx = fake.calls.firstIndex(
-            of: .removePending(["abc", "def"]))
-        XCTAssertNotNil(removeDeliveredIdx,
-                        "Expected removeDelivered call; got \(fake.calls)")
-        XCTAssertNotNil(removePendingIdx,
-                        "Expected removePending call; got \(fake.calls)")
-        XCTAssertLessThan(removeDeliveredIdx!, removePendingIdx!,
-                          "Dismiss must hit delivered before pending; got \(fake.calls)")
+        // `XCTUnwrap` both at once and assert on the unwrapped Ints
+        // — the previous shape XCTAssertNotNil'd separately and then
+        // force-unwrapped, which the lint policy flags. Collapsing
+        // to `XCTUnwrap` keeps the failure messages clear (the
+        // unwrap surfaces the missing-call case) and lets the
+        // `LessThan` comparison work on non-optional values.
+        let removeDeliveredIdx = try XCTUnwrap(
+            fake.calls.firstIndex(of: .removeDelivered(["abc", "def"])),
+            "Expected removeDelivered call; got \(fake.calls)"
+        )
+        let removePendingIdx = try XCTUnwrap(
+            fake.calls.firstIndex(of: .removePending(["abc", "def"])),
+            "Expected removePending call; got \(fake.calls)"
+        )
+        XCTAssertLessThan(
+            removeDeliveredIdx, removePendingIdx,
+            "Dismiss must hit delivered before pending; got \(fake.calls)"
+        )
     }
 
     /// When every supplied id matches a known pending notification,

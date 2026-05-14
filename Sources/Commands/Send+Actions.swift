@@ -167,15 +167,36 @@ extension Send {
     /// and `parseTextActions`. Returns the three components; the
     /// caller wraps them in a `ParsedAction` of the appropriate kind.
     ///
+    /// Bundle of fields produced by `splitActionString`. Previously a
+    /// 3-tuple; SwiftLint's `large_tuple` rule (with the project's
+    /// strict policy) treats anything past 2 members as a hint to
+    /// introduce a named type. The struct keeps field accesses
+    /// identical (`.id`, `.title`, `.options`) at every call site.
+    struct SplitAction: Equatable {
+        let id: String
+        let title: String
+        let options: UNNotificationActionOptions
+
+        // `UNNotificationActionOptions` is a bridged ObjC option set
+        // whose `==` lives on `RawRepresentable`. Spell out
+        // `Equatable` so test assertions don't trip on a missing
+        // synthesised conformance.
+        static func == (lhs: SplitAction, rhs: SplitAction) -> Bool {
+            lhs.id == rhs.id
+            && lhs.title == rhs.title
+            && lhs.options == rhs.options
+        }
+    }
+
     /// - Parameters:
     ///   - raw: The user-supplied flag value.
     ///   - flagName: The flag's user-facing name, threaded into
     ///     error messages so the diagnostic matches the flag that
     ///     produced the value.
-    /// - Returns: (id, title, options) parsed from `raw`.
+    /// - Returns: The parsed components.
     static func splitActionString(
         _ raw: String, flagName: String
-    ) throws -> (id: String, title: String, options: UNNotificationActionOptions) {
+    ) throws -> SplitAction {
         guard let colon = raw.firstIndex(of: ":") else {
             throw ValidationError(
                 "\(flagName) '\(raw)' is missing a ':'. Expected form: "
@@ -247,7 +268,7 @@ extension Send {
                 + "Choose a different id."
             )
         }
-        return (id: id, title: title, options: options)
+        return SplitAction(id: id, title: title, options: options)
     }
 
     /// Parse and validate the `--action` array. The grammar is
@@ -376,14 +397,17 @@ extension Send {
             )
         }
         var seen = Set<String>()
-        for action in buttons + textInputs {
-            if !seen.insert(action.id).inserted {
-                throw ValidationError(
-                    "Action id '\(action.id)' is used more than once across "
-                    + "--action and --text-action. Each id must be unique within "
-                    + "the notification."
-                )
-            }
+        for action in buttons + textInputs where !seen.insert(action.id).inserted {
+            // `seen.insert(...)` runs the same way whether the
+            // collision is in the `where` clause or an inner `if`;
+            // the side effect (adding the id to `seen`) is the
+            // load-bearing bit, and the `where`-form pleases the
+            // `for_where` lint without changing semantics.
+            throw ValidationError(
+                "Action id '\(action.id)' is used more than once across "
+                + "--action and --text-action. Each id must be unique within "
+                + "the notification."
+            )
         }
     }
 

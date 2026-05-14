@@ -231,16 +231,17 @@ extension Send {
     ///   `calendar` pinned to Gregorian.
     /// - Throws: `ValidationError` on any malformed shape.
     static func parseCalendarRepeat(_ raw: String) throws -> DateComponents {
-        // `requireNonBlank` short-circuits on `nil`, but `raw` here is
-        // non-optional — force-unwrap is safe because we just passed
-        // a non-`nil` value in.
+        // Non-optional `requireNonBlank` overload: `raw` is already
+        // non-optional, so the umbrella `String? -> String?` shape
+        // would force a `!` unwrap with no upside. The dedicated
+        // overload preserves the non-optional return type end-to-end.
         let trimmed = try SharedValidation.requireNonBlank(
             raw,
             flag: "--repeat",
             emptyAdvice:
                 "Use 'hourly', 'daily:HH:MM', 'weekly:DAY:HH:MM', "
                 + "or 'monthly:D:HH:MM'."
-        )!
+        )
         let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
             .map(String.init)
         // POSIX-locale lowercase: `.lowercased()` is locale-sensitive,
@@ -383,13 +384,13 @@ extension Send {
     ///   unit, non-finite or non-positive numeric portion, or values
     ///   below the minimum.
     static func parseScheduleInterval(_ raw: String) throws -> TimeInterval {
-        // Force-unwrap is safe: `raw` is non-optional, so
-        // `requireNonBlank` cannot return `nil`.
+        // Non-optional `requireNonBlank` overload — see
+        // `parseCalendarRepeat` for the rationale.
         let trimmed = try SharedValidation.requireNonBlank(
             raw,
             flag: "--in",
             emptyAdvice: "Use a value like 30s, 5m, 2h, or 1d."
-        )!
+        )
         guard let match = try? scheduleIntervalPattern.wholeMatch(in: trimmed) else {
             throw ValidationError(
                 "--in '\(raw)' is not a recognized duration. Expected "
@@ -491,13 +492,13 @@ extension Send {
     /// - Throws: `ValidationError` on empty input, parse failure, a
     ///   date in the past, or a date too close to `now`.
     static func parseScheduleDate(_ raw: String, now: Date) throws -> Date {
-        // Force-unwrap is safe: `raw` is non-optional, so
-        // `requireNonBlank` cannot return `nil`.
+        // Non-optional `requireNonBlank` overload — see
+        // `parseCalendarRepeat` for the rationale.
         let trimmed = try SharedValidation.requireNonBlank(
             raw,
             flag: "--at",
             emptyAdvice: "Use a timestamp like 2026-12-31T17:00:00Z or 2026-12-31 17:00."
-        )!
+        )
         if let parsed = Self.tryParseScheduleDate(trimmed) {
             try Self.rejectPastOrNearFutureDate(parsed, now: now, raw: raw)
             return parsed

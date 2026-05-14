@@ -232,11 +232,14 @@ jobs:
         run: |
           set -euo pipefail
           # notarytool requires a `.zip` of the .app for upload
-          # (it does NOT accept a bare .app or a tar.gz). The
-          # `--symlinks` flag preserves the framework symlinks
-          # macOS bundles depend on; without it the unzipped
-          # bundle fails to launch.
-          ditto -c -k --keepParent --symlinks \
+          # (it does NOT accept a bare .app or a tar.gz).
+          # `-c -k --keepParent` is Apple's documented incantation
+          # for "produce a zip suitable for notarisation" — the
+          # archive contains `roar.app/...` and ditto preserves
+          # the framework symlinks (`Versions/Current`, etc.) that
+          # bundles depend on. No extra flag is needed for symlinks;
+          # ditto's default zip behaviour stores them as symlinks.
+          ditto -c -k --keepParent \
             build/release/roar.app \
             build/release/roar.app.zip
 
@@ -296,8 +299,11 @@ jobs:
           # the binary. ditto preserves Apple-extended attributes
           # (com.apple.ResourceFork, codesign signatures) that the
           # tar invocation above intentionally strips for
-          # cross-platform extraction friendliness.
-          ditto -c -k --keepParent --symlinks \
+          # cross-platform extraction friendliness. Framework
+          # symlinks inside the bundle survive without an extra
+          # flag — ditto's zip format stores them as symlinks by
+          # default.
+          ditto -c -k --keepParent \
             "$STAGE/roar.app" \
             "build/release/roar-$VERSION.app.zip"
 

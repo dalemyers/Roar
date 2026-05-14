@@ -23,8 +23,7 @@ extension Send {
     ///   if the URL or any scheme-name addition is malformed, or
     ///   the URL's scheme is not in the combined allow-list.
     func validateOpenURLIfPresent() throws
-        -> (absoluteString: String, allowList: Set<String>)?
-    {
+        -> (absoluteString: String, allowList: Set<String>)? {
         guard let openURL else { return nil }
         do {
             let allowList = try URLValidation.buildAllowList(

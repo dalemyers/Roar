@@ -100,7 +100,12 @@ final class ListFormattingTests: XCTestCase {
     /// only the historical seven would otherwise slip through.
     func testFlattenReplacesAllC0Controls() {
         for byte in 0x00...0x1F {
-            let scalar = Unicode.Scalar(byte)!
+            // `Unicode.Scalar(UInt8)` is the non-failable initialiser
+            // — every byte 0x00...0xFF is a valid scalar. Using it
+            // instead of the failable `Unicode.Scalar(Int)?` overload
+            // avoids a force-unwrap on a value that's unwrappable by
+            // construction.
+            let scalar = Unicode.Scalar(UInt8(byte))
             let input = "a\(Character(scalar))b"
             XCTAssertEqual(
                 List.flatten(input), "a b",

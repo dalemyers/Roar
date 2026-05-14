@@ -31,12 +31,13 @@ final class SpawnEnvironmentTests: XCTestCase {
                        "PATH must be pinned to the system default")
     }
 
-    func testHostilePATHIsDropped() {
+    func testHostilePATHIsDropped() throws {
         // The headline attack: parent sets PATH=~/.attacker-bin first.
         let env = env(from: ShellExecutor.buildSpawnEnvironment(parentEnv: [
             "PATH": "/Users/victim/.attacker-bin:/usr/bin",
         ]))
-        XCTAssertFalse(env["PATH"]!.contains(".attacker-bin"))
+        let path = try XCTUnwrap(env["PATH"])
+        XCTAssertFalse(path.contains(".attacker-bin"))
     }
 
     func testBASHENVIsDropped() {

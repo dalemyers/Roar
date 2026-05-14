@@ -114,7 +114,7 @@ final class RoarAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
         /// The fallback Task started by the no-args branch. Held here
         /// so `didReceive` can cancel it synchronously, without an
         /// actor hop.
-        var fallbackTask: Task<Void, Never>? = nil
+        var fallbackTask: Task<Void, Never>?
     }
 
     /// Lock-protected click coordination state. `OSAllocatedUnfairLock`
@@ -808,7 +808,7 @@ final class RoarAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
                     }
                 )
             }
-            
+
             guard success else {
                 scheduleExit(code: 1)
                 return

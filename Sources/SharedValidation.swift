@@ -113,4 +113,53 @@ enum SharedValidation {
         }
         return trimmed
     }
+
+    /// Non-optional overload of `requireNonBlank(_:flag:...)`. Use this
+    /// at call sites where the input is already non-optional and the
+    /// optional return shape of the umbrella overload would force a
+    /// force-unwrap (`!`) on every call. The body is shared via the
+    /// optional overload — passing `value` as `Optional` preserves
+    /// the single source of truth for the trim / empty / control-char
+    /// pipeline.
+    ///
+    /// The optional overload exists to make "flag passed?" branching
+    /// natural for sites that accept `String?` (most ArgumentParser
+    /// flags). Sites that parse a sub-grammar — `--in`, `--at`,
+    /// `--repeat` — receive a non-optional value (the umbrella flag
+    /// match already confirmed the flag was passed) and shouldn't
+    /// have to write `try foo()!` to recover the non-optional shape.
+    ///
+    /// - Throws: same as the optional overload.
+    /// - Returns: the trimmed non-optional value.
+    nonisolated static func requireNonBlank(
+        _ value: String,
+        flag: String,
+        emptyAdvice: String = "",
+        rejectControlCharacters: Bool = false,
+        controlCharactersAdvice: String =
+            "Stick to printable ASCII for portability."
+    ) throws -> String {
+        // Bridge to the optional overload. The `nil` branch in the
+        // optional version is unreachable from here (we pass a real
+        // String), so the force-cast pattern would be safe — but
+        // using `guard let` instead of `!` keeps the file
+        // `force_unwrapping`-clean.
+        guard let trimmed = try requireNonBlank(
+            value as String?,
+            flag: flag,
+            emptyAdvice: emptyAdvice,
+            rejectControlCharacters: rejectControlCharacters,
+            controlCharactersAdvice: controlCharactersAdvice
+        ) else {
+            // Unreachable: the optional overload returns nil only
+            // when `value` is `nil`, but `value as String?` always
+            // wraps a real value. A future refactor that changes the
+            // optional overload's contract would surface here.
+            throw ValidationError(
+                "\(flag) failed validation unexpectedly. "
+                + "This is a bug — please report it."
+            )
+        }
+        return trimmed
+    }
 }

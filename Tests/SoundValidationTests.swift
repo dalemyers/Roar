@@ -7,7 +7,10 @@ final class SoundValidationTests: XCTestCase {
     /// Per-test temp directory the helper points at instead of the
     /// system sound locations. Built fresh in `setUp` so each test gets
     /// a clean slate.
-    private var soundDir: URL!
+    ///
+    /// XCTestCase fixture assigned in `setUpWithError`. See
+    /// `AttachmentExistenceTests` for the disable rationale.
+    private var soundDir: URL! // swiftlint:disable:this implicitly_unwrapped_optional
 
     override func setUpWithError() throws {
         try super.setUpWithError()

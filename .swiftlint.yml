@@ -54,18 +54,25 @@ opt_in_rules:
   - toggle_bool
   - unneeded_parentheses_in_closure_argument
 
-# Severities — `force_*` rules are warnings rather than errors so
-# the build doesn't fail on a single intentional `try!` in a test
-# fixture. Tests that legitimately need force-unwrap can wrap the
-# line in a `// swiftlint:disable:next force_unwrapping` comment.
+# Severities — the project's CI runs SwiftLint with `--strict`,
+# which promotes every warning to an error. The per-rule severity
+# settings below are therefore largely cosmetic; they mostly control
+# how violations render in `swiftlint --reporter xcode` for local
+# editing (warnings vs errors in Xcode's Issue Navigator). The
+# settings are kept as `warning` so local edits remain interactive
+# while CI enforces the strict policy.
+#
+# Sites that legitimately need a pattern the linter flags use inline
+# `// swiftlint:disable:this <rule>` annotations with a rationale
+# comment. The current users:
+#   * `Tests/*Tests.swift` IUO fixtures (XCTestCase set-in-setUp
+#     pattern — see `AttachmentExistenceTests` for the canonical
+#     rationale comment, referenced by the others).
 force_cast: warning
 force_try: warning
 force_unwrapping:
   severity: warning
 
-# Implicitly-unwrapped optionals are bad form except for IBOutlets,
-# which the project doesn't use. Surface as warning so future code
-# reviews catch new occurrences.
 implicitly_unwrapped_optional:
   severity: warning
 
@@ -79,10 +86,11 @@ function_parameter_count:
   warning: 14
   error: 20
 
-# CI invokes SwiftLint without `--strict`, so warnings are visible
-# as PR annotations but only errors fail the workflow. New code
-# that introduces a warning will surface in review without
-# blocking unrelated work; fix-as-you-go is the policy.
+# CI invokes SwiftLint with `--strict`, which promotes every
+# warning to an error. The merge-blocking rule is "lint must be
+# clean" — new violations fail the workflow rather than annotating
+# without blocking. This makes the linter a real regression gate,
+# not advisory output that drifts.
 
 # Reporter is `github-actions-logging` only in CI (set via the
 # workflow invocation); local runs use the default `xcode` reporter

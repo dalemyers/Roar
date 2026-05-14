@@ -211,8 +211,9 @@ final class ScheduleTriggerTests: XCTestCase {
 
     func testParsesBasicISO8601() throws {
         let date = try Send.parseScheduleDate("2026-12-31T17:00:00Z", now: now)
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let comps = Calendar(identifier: .gregorian).dateComponents(
-            in: TimeZone(identifier: "UTC")!, from: date)
+            in: utc, from: date)
         XCTAssertEqual(comps.year, 2026)
         XCTAssertEqual(comps.month, 12)
         XCTAssertEqual(comps.day, 31)
@@ -222,8 +223,9 @@ final class ScheduleTriggerTests: XCTestCase {
     func testParsesOffsetForm() throws {
         let date = try Send.parseScheduleDate(
             "2026-12-31T17:00:00+01:00", now: now)
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let comps = Calendar(identifier: .gregorian).dateComponents(
-            in: TimeZone(identifier: "UTC")!, from: date)
+            in: utc, from: date)
         XCTAssertEqual(comps.year, 2026)
         XCTAssertEqual(comps.hour, 16) // +01:00 → 16:00Z
     }

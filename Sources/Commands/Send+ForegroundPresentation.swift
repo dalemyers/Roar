@@ -40,11 +40,11 @@ extension Send {
     /// silently do nothing on modern OS versions.
     static let foregroundPresentationOptionNames:
         [(name: String, bits: UNNotificationPresentationOptions)] = [
-        ("banner", .banner),
-        ("list", .list),
-        ("sound", .sound),
-        ("badge", .badge),
-    ]
+            ("banner", .banner),
+            ("list", .list),
+            ("sound", .sound),
+            ("badge", .badge),
+        ]
 
     /// Sentinel value the user supplies in place of any option name to
     /// request an explicitly empty presentation set (notification
