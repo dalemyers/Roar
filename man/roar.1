@@ -1,0 +1,483 @@
+.\" Manual page for roar(1)
+.\"
+.\" Hand-maintained alongside the ArgumentParser help text in
+.\" Sources/Commands/*.swift. Keep the two in sync: the help text is
+.\" the canonical short form (read interactively via `roar <sub> --help`);
+.\" this man page is the long-form reference (read via `man roar`).
+.\"
+.\" To preview locally without installing:
+.\"     man -l man/roar.1
+.\"
+.\" To install for the current user (Bash/zsh both honour MANPATH):
+.\"     mkdir -p ~/.local/share/man/man1
+.\"     cp man/roar.1 ~/.local/share/man/man1/
+.\"     export MANPATH="$HOME/.local/share/man:$MANPATH"
+.\"
+.\" To install system-wide (requires sudo):
+.\"     sudo cp man/roar.1 /usr/local/share/man/man1/
+.\"
+.TH ROAR 1 "2026-05-13" "roar 3.0.0" "User Commands"
+.SH NAME
+roar \- send macOS user notifications from the command line
+.SH SYNOPSIS
+.B roar
+.RI [ subcommand ]
+.RI [ options ...]
+.SH DESCRIPTION
+.B roar
+posts notifications through Apple's
+.B UserNotifications
+framework so they appear in Notification Center, in the banner area, and
+under Focus rules the same way any other macOS application's
+notifications do. The tool ships as a small AppKit-hosted CLI: it
+dispatches on a subcommand, hands off to the framework, drains the XPC
+ack, and exits.
+.PP
+The available subcommands are
+.BR send ,
+.BR list ,
+.BR dismiss ,
+.BR clear ,
+and
+.BR settings .
+A bare
+.B roar
+invocation prints the command-level help — pick a subcommand
+explicitly.
+.SH SUBCOMMANDS
+.SS roar send [options]
+Post a single notification. Most options below correspond to fields on
+.IR UNMutableNotificationContent .
+.TP
+.BI --title " TITLE"
+Notification title. Defaults to the machine's user-visible name
+(System Settings \(-> General \(-> About \(-> Name), falling back to
+the short hostname.
+.TP
+.BI --subtitle " TEXT"
+Notification subtitle.
+.TP
+.BI "--body, -b " TEXT
+Notification body. If omitted and stdin is piped, the body is read
+from stdin (capped at 1 MB).
+.TP
+.BI --sound " NAME"
+Name of a system sound to play (e.g.
+.BR Glass ,
+.BR Ping ),
+or
+.B default
+for the default notification sound. The probe checks
+.B /System/Library/Sounds
+and
+.BR /Library/Sounds .
+.TP
+.BI --identifier " ID"
+Stable identifier. Reposting with the same identifier replaces the
+prior notification in place (no flicker, no duplicate). Omit to mint
+a fresh UUID per send. Max 256 characters; no NUL / control bytes.
+.TP
+.BI --activate-bundle-id " com.example.app"
+Bundle identifier of an application to activate when the notification
+is clicked.
+.TP
+.BI --open-url " URL"
+URL to open when the notification is clicked. By default only
+.BR http: ,
+.BR https: ,
+and
+.B mailto:
+are accepted; pass
+.B --allow-any-url-scheme
+to accept others. A built-in deny-list always rejects script-bearing
+schemes (file:, javascript:, data:, applescript:, ...) even with the
+override flag.
+.TP
+.B --allow-any-url-scheme
+Allow URL schemes outside the default allow-list.
+.TP
+.BI --exec " CMD"
+Shell command to run via
+.B /bin/sh -c
+when the notification is clicked. Requires
+.BR --allow-shell-on-click .
+.TP
+.B --allow-shell-on-click
+Acknowledge that
+.B --exec
+runs a shell command on click and proceed. Required when
+.B --exec
+is set.
+.TP
+.BI --attachment " PATH"
+Local path to an image, audio file, or video to attach. Repeat for
+multiple attachments (max 10). Remote URLs are rejected — pre-download
+with
+.B curl -o /tmp/foo
+first.
+.TP
+.B --no-thumbnail
+Suppress the small thumbnail preview macOS renders alongside the
+attachment.
+.TP
+.BI --thumbnail-time " SECONDS"
+Seconds offset into a video attachment to use for thumbnail
+generation. Must be \(>= 0.
+.TP
+.BI --attachment-type-hint " UTI"
+UTI (e.g.
+.BR public.png ,
+.BR public.mpeg-4 )
+telling the framework how to interpret the attachment.
+.TP
+.BI --interruption-level " LEVEL"
+Disruption tier:
+.B passive
+(Notification Center only),
+.B active
+(default, banner+NC), or
+.B time-sensitive
+(bypasses Focus / Do Not Disturb).
+.TP
+.BI --thread-id " ID"
+Thread identifier for grouping related notifications in Notification
+Center.
+.TP
+.BI --relevance-score " 0.0..1.0"
+Importance hint used by macOS to rank this notification within
+summaries.
+.TP
+.BI --in " DURATION"
+Schedule firing after the given delay.
+.BR <number><unit> ,
+where unit is
+.B s
+/
+.B m
+/
+.B h
+/
+.B d
+(e.g.
+.BR 30s ,
+.BR 5m ,
+.BR 1.5h ,
+.BR 2d ).
+Minimum 1s, maximum 365d. Mutually exclusive with
+.B --at
+and
+.BR --repeat .
+.TP
+.BI --at " TIMESTAMP"
+Schedule firing at a specific time. Accepted forms:
+.RS
+.IP \(bu 2
+ISO 8601 with zone:
+.B 2026-12-31T17:00:00Z
+or
+.BR 2026-12-31T17:00:00+01:00 .
+.IP \(bu 2
+Local time without zone:
+.B 2026-12-31T17:00:00
+or
+.B "2026-12-31 17:00:00"
+or
+.BR "2026-12-31 17:00" .
+.IP \(bu 2
+Date-only at local midnight:
+.BR 2026-12-31 .
+.RE
+.IP
+Past timestamps and timestamps less than 1s in the future are
+rejected. Mutually exclusive with
+.B --in
+and
+.BR --repeat .
+.TP
+.BI --repeat " PATTERN"
+Recurring calendar schedule. Forms:
+.BR hourly ,
+.BR "daily:HH:MM" ,
+.BR "weekly:DAY:HH:MM" ,
+.BR "monthly:D:HH:MM" .
+Times are interpreted in the system's current local timezone.
+Mutually exclusive with
+.B --in
+and
+.BR --at .
+.TP
+.BI --action " ID:TITLE[::FLAGS]"
+Add a custom button. Optional
+.B ::
+suffix carries action flags:
+.B destructive
+and
+.BR auth-required ,
+comma-separated. Repeat for additional buttons (max 4). Requires
+.BR --wait .
+.TP
+.BI --text-action " ID:TITLE[::FLAGS]"
+Add a text-input (reply-style) action. At most one per notification.
+Requires
+.BR --wait .
+.TP
+.BI --text-placeholder " TEXT"
+Placeholder shown inside the reply field for
+.BR --text-action .
+.TP
+.BI --text-button-title " LABEL"
+Label of the inline send button next to the reply field.
+.TP
+.BI --badge-count " N"
+Per-notification badge count.
+.B 0
+clears an existing badge. Must be \(>= 0.
+.TP
+.BI --target-content-id " ID"
+Hint string handed to the target app on click, used to route the
+click to a specific window or document.
+.TP
+.BI --hide-previews-body-placeholder " TEXT"
+Placeholder body shown when the user has set 'Show Previews' to
+\&'When Unlocked' or 'Never'.
+.TP
+.BI --summary-format " FORMAT"
+Format string for the summary line macOS renders when multiple
+notifications in this category collapse together. Supports
+.B %u
+(unread count) and
+.B %@
+(comma-joined intent identifiers).
+.TP
+.B --show-title-when-previews-hidden
+Show the notification title on the lock screen even when previews
+are hidden.
+.TP
+.B --show-subtitle-when-previews-hidden
+Show the notification subtitle on the lock screen even when
+previews are hidden.
+.TP
+.BI --foreground-presentation " OPTION"
+How the notification should appear if it arrives while
+.B roar
+itself is still running in the foreground (typically only the
+.B --wait
+flow). Repeat the flag for multiple options
+.RB ( --foreground-presentation
+.B banner
+.B --foreground-presentation
+.BR list ),
+choosing from
+.BR banner ,
+.BR list ,
+.BR sound ,
+.BR badge .
+.TP
+.BI --filter-criteria " STRING"
+Focus-filter hint handed to the framework via
+.IR UNMutableNotificationContent.filterCriteria .
+.TP
+.B --wait
+Block until the user interacts with the notification, then print
+the chosen action id to stdout and exit. Exit codes:
+.B 0
+(default click or custom action),
+.B 3
+(explicit dismiss),
+.B 2
+(timeout from
+.BR --wait-timeout ).
+For a
+.B --text-action
+interaction, the typed text follows the action id on a second
+line. Read to EOF — embedded newlines are passed through verbatim.
+Mutually exclusive with
+.BR --exec ,
+.BR --open-url ,
+and
+.BR --activate-bundle-id .
+.TP
+.BI --wait-timeout " DURATION"
+Maximum time to wait for interaction in
+.B --wait
+mode. Same format as
+.BR --in .
+Defaults to
+.B 5m
+so unattended scripts can't hang forever; pass a larger value
+(up to 365d) to extend.
+.SS roar list [--delivered | --pending] [--header]
+List notifications belonging to this app. Output is tab-separated:
+.BR ID ,
+.BR STATUS ,
+.BR TIME ,
+.BR TITLE ,
+.BR BODY .
+Newlines and tabs in title/body are flattened to spaces.
+.TP
+.B --delivered
+Show only delivered notifications. Mutually exclusive with
+.BR --pending .
+.TP
+.B --pending
+Show only pending (scheduled-but-not-yet-fired) notifications.
+.TP
+.B --header
+Print a column header line before the listing.
+.SS roar dismiss <id> [<id>...]
+Remove the named notifications from both the delivered and pending
+buckets. Unknown ids are reported on stderr; if NO id matched, the
+exit code is
+.B 4
+(distinct from 0 = at least one matched and ArgumentParser's 64 =
+usage error). At least one id matching produces exit 0 plus a stderr
+warning naming the unknowns.
+.SS roar clear [--delivered | --pending | --all] [--categories]
+Remove notifications belonging to this app. By default, only
+.B delivered
+notifications are removed — pending (scheduled) requests are
+preserved.
+.TP
+.B --delivered
+Clear only delivered notifications (same as the default).
+.TP
+.B --pending
+Clear only pending notifications.
+.TP
+.B --all
+Clear BOTH delivered and pending. Equivalent to the historical
+no-flag behaviour; opt-in now so a typo'd
+.B roar clear
+cannot destroy scheduled requests.
+.TP
+.B --categories
+Prune
+.B roar.dyn.*
+notification categories that aren't referenced by any currently
+delivered or pending notification. Safe to run any time. Combine
+with a scope flag to clear and prune in one shot; pass alone to
+prune without touching notifications.
+.SS roar settings
+Print the system's
+.I UNNotificationSettings
+for this bundle, one
+.BI key ": " value
+per line. Useful for debugging why a notification didn't play a
+sound or break through Focus.
+.SH EXIT STATUS
+.TP
+.B 0
+Success — the notification was posted (
+.BR send ),
+the request was queued (
+.BR send --in / --at ),
+the list rendered (
+.BR list ),
+at least one id was matched (
+.BR dismiss ),
+the clear completed (
+.BR clear ),
+the settings printed (
+.BR settings ),
+or the user interacted with the notification (
+.BR send --wait ).
+.TP
+.B 1
+Authorization denied, or a side-effect failed (e.g.
+.B --activate-bundle-id
+referred to an app that LaunchServices could not find).
+.TP
+.B 2
+.B --wait-timeout
+elapsed before the user interacted with the notification.
+.TP
+.B 3
+.B --wait
+mode and the user explicitly dismissed the notification (swipe /
+"X" / right-click \(-> close).
+.TP
+.B 4
+.B roar dismiss
+and NONE of the supplied identifiers matched a delivered or pending
+notification.
+.TP
+.B 64
+Invalid arguments (
+.BR EX_USAGE ).
+.SH ENVIRONMENT
+.TP
+.B ROAR_DEBUG
+When set to any non-empty value, the click-handler emits verbose
+diagnostics to stderr. Off by default to keep credential-bearing URLs
+and bundle ids out of the unified log under launchd.
+.SH EXAMPLES
+Send a simple notification:
+.PP
+.RS
+.nf
+roar send --body "Build complete"
+.fi
+.RE
+.PP
+Send a notification that fires in 5 minutes:
+.PP
+.RS
+.nf
+roar send --body "Stand-up in 5" --in 5m
+.fi
+.RE
+.PP
+Schedule a notification for a specific local time:
+.PP
+.RS
+.nf
+roar send --body "Backup window starts now" --at "2026-12-31 03:00"
+.fi
+.RE
+.PP
+Block on a yes/no decision:
+.PP
+.RS
+.nf
+choice=$(roar send --wait \\
+    --body "Deploy to production?" \\
+    --action approve:Approve \\
+    --action reject:Reject)
+case "$choice" in
+    approve) deploy ;;
+    reject)  echo "cancelled" ;;
+    *)       echo "no answer" ;;
+esac
+.fi
+.RE
+.PP
+Pipe build output as the body:
+.PP
+.RS
+.nf
+make 2>&1 | tail -n 1 | roar send --title "Build" --in 1s
+.fi
+.RE
+.SH FILES
+.TP
+.I /System/Library/Sounds
+.TQ
+.I /Library/Sounds
+Directories scanned by the
+.B --sound
+validator. Files must have a
+.B .aiff
+or
+.B .caf
+extension to be picked up by the
+.B UserNotifications
+framework.
+.SH SEE ALSO
+.BR launchd (8),
+.BR osascript (1),
+.BR cron (8).
+.PP
+For source and issues:
+https://github.com/dalemyers/Roar
+.SH AUTHORS
+roar is an Anthropic Claude Code collaboration with Dale Myers.

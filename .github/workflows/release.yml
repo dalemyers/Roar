@@ -1,0 +1,490 @@
+# Release pipeline.
+#
+# Triggered when a `v*` tag is pushed (e.g. `git tag v1.0.0 && git
+# push origin v1.0.0`). Builds the `.app` with Developer ID
+# signing, notarises it via `xcrun notarytool`, staples the
+# notarisation receipt, packages everything (app + man page +
+# install helper) into a `.tar.gz`, and attaches the bundle to a
+# new GitHub Release.
+#
+# ## Required repo secrets
+#
+# The user must provision these in `Settings → Secrets and
+# variables → Actions` before the first tagged release works:
+#
+#   BUILD_CERTIFICATE_BASE64   The Developer ID Application
+#                              certificate exported from Keychain
+#                              Access as a `.p12`, then `base64 -i
+#                              cert.p12 | pbcopy` and pasted as the
+#                              secret value.
+#   P12_PASSWORD               The password used when exporting
+#                              the `.p12` from Keychain Access.
+#   KEYCHAIN_PASSWORD          Any random string. Used as the
+#                              unlock password for the temporary
+#                              keychain we create on the runner.
+#                              Generate with `openssl rand -hex 32`
+#                              and paste; the value is opaque.
+#   APPLE_ID                   The Apple ID email associated with
+#                              the Developer Program account.
+#   APPLE_ID_PASSWORD          An app-specific password for that
+#                              Apple ID, generated at
+#                              https://appleid.apple.com → Sign-In
+#                              and Security → App-Specific
+#                              Passwords. NOT the iCloud password.
+#   APPLE_TEAM_ID              The Developer Team ID, a 10-character
+#                              alphanumeric string visible at
+#                              https://developer.apple.com/account
+#                              → Membership.
+#
+# ## What the workflow does NOT do
+#
+# It doesn't notarise unsigned binaries (notarytool refuses), and it
+# doesn't fall back to ad-hoc signing on missing secrets. If any of
+# the secrets are absent the workflow fails fast in the keychain
+# setup step — better than producing an unsigned artifact that
+# Gatekeeper rejects on download.
+#
+# It doesn't auto-bump the version in `project.yml`. The git tag is
+# the source of truth for the user-visible version; if the bundle's
+# `CFBundleShortVersionString` needs to match the tag, bump it in
+# `project.yml` before tagging.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual trigger so a re-run can be forced without re-tagging.
+  # The release name is derived from the tag; `workflow_dispatch`
+  # uses the tag the workflow was triggered against.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.0). Must already exist.'
+        required: true
+        type: string
+
+permissions:
+  # `contents: write` so the `softprops/action-gh-release` step can
+  # create the release entry and upload artifacts.
+  contents: write
+
+jobs:
+  release:
+    name: Build & notarise
+    runs-on: macos-latest
+    env:
+      # Resolved tag — falls back to the workflow_dispatch input
+      # when the workflow is run manually rather than on a tag
+      # push. `github.ref_name` is the tag string for tag-triggered
+      # runs ("v1.0.0"), the branch name otherwise.
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # The default fetch depth is 1 (shallow); fetch the tag
+          # explicitly so `git describe` and any future
+          # commit-walking step has the full history if needed.
+          fetch-depth: 0
+
+      - name: Select Xcode 26
+        # Pin to Xcode 26 so the shipped binary matches the SDK the
+        # source was developed and tested against. See
+        # `.github/workflows/ci.yml` for the full rationale.
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null \
+                    | sort --version-sort \
+                    | tail -n 1)
+          if [[ -z "${XCODE}" ]]; then
+            echo "::error::Xcode 26 not found on this runner image." >&2
+            echo "Available Xcodes:" >&2
+            ls -d /Applications/Xcode_*.app 2>/dev/null >&2 || true
+            exit 1
+          fi
+          echo "Selecting ${XCODE}"
+          sudo xcode-select -s "${XCODE}"
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # ---------------------------------------------------------------
+      # Code signing setup. We create a temporary keychain on the
+      # runner, import the Developer ID Application cert, and
+      # unlock it so xcodebuild can use it during the build phase.
+      # The keychain is deleted at the end of the job; the cert
+      # never persists on the runner image. This pattern is
+      # documented in
+      # https://docs.github.com/en/actions/use-cases-and-examples/deploying/installing-an-apple-certificate-on-macos-runners-for-xcode-development
+      # — we follow it verbatim except that the temp keychain name
+      # is derived from `RUNNER_TEMP` so multiple concurrent
+      # release runs on the same runner image don't collide on the
+      # keychain path.
+      # ---------------------------------------------------------------
+      - name: Import signing certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          # Decode the base64-encoded .p12 from secret into a file.
+          # `base64 -D` is the macOS spelling (Linux uses `-d`).
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 -D -o "$CERT_PATH"
+
+          # Create a fresh keychain. The password ONLY matters to
+          # the import + unlock dance below — nothing persistent
+          # uses it.
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Make the temp keychain the default lookup target AND
+          # add it to the search list, so xcodebuild's
+          # `security find-identity` call finds our identity.
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the .p12. `-T /usr/bin/codesign` whitelists
+          # codesign as an allowed user of the imported key so
+          # xcodebuild's signing step doesn't trigger an
+          # interactive password prompt at sign time.
+          security import "$CERT_PATH" \
+            -P "$P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # macOS 10.12+ requires this incantation to suppress the
+          # codesign-time UI prompt for keychain access. Without
+          # it the build hangs waiting for a human to click
+          # "Always Allow" on a runner with no human.
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          # Sanity: list the identities the runner now sees so a
+          # signing-step failure has a diagnostic upstream of the
+          # xcodebuild log.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      # ---------------------------------------------------------------
+      # Build. Override the ad-hoc signing settings from
+      # `project.yml` on the command line so the release build
+      # uses the Developer ID cert. The entitlements file
+      # (`Resources/roar.entitlements`) is already wired via
+      # `project.yml` and is unchanged — its `get-task-allow=false`
+      # entry is required for notarisation.
+      # ---------------------------------------------------------------
+      - name: Build release
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Roar.xcodeproj \
+            -scheme roar \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/derived \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_ENTITLEMENTS=Resources/roar.entitlements \
+            build
+
+          # The built .app lands at a well-known location under
+          # the derived-data path. Stage it where the notarisation
+          # and packaging steps can find it deterministically.
+          mkdir -p build/release
+          cp -R build/derived/Build/Products/Release/roar.app \
+                build/release/roar.app
+
+      # ---------------------------------------------------------------
+      # Notarisation. `xcrun notarytool` (Xcode 13+) supersedes the
+      # older `altool` flow; it accepts the Apple ID, the
+      # app-specific password, and the team ID, uploads a zipped
+      # `.app`, polls until Apple's notarisation service returns,
+      # and then we staple the resulting receipt onto the bundle
+      # so Gatekeeper can verify it offline.
+      # ---------------------------------------------------------------
+      - name: Notarise
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          # notarytool requires a `.zip` of the .app for upload
+          # (it does NOT accept a bare .app or a tar.gz). The
+          # `--symlinks` flag preserves the framework symlinks
+          # macOS bundles depend on; without it the unzipped
+          # bundle fails to launch.
+          ditto -c -k --keepParent --symlinks \
+            build/release/roar.app \
+            build/release/roar.app.zip
+
+          # `--wait` blocks until Apple's service finishes; the
+          # exit code is non-zero on rejection so the workflow
+          # fails fast. Output is also captured into the log for
+          # diagnostic purposes.
+          xcrun notarytool submit \
+            build/release/roar.app.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # Staple the notarisation ticket onto the .app so
+          # Gatekeeper can validate the build OFFLINE (without
+          # the staple, first-launch on a network-disconnected
+          # machine prompts the user). The staple modifies the
+          # .app in place; we re-zip below.
+          xcrun stapler staple build/release/roar.app
+
+          # Verify the staple landed. `spctl --assess` is the
+          # exact check Gatekeeper runs on first launch — failing
+          # here means a downloaded build would be rejected even
+          # though notarisation succeeded.
+          spctl --assess --type execute --verbose=2 \
+            build/release/roar.app
+
+      # ---------------------------------------------------------------
+      # Package the release artifact. We ship:
+      #   - `roar.app` (the .app bundle, notarised + stapled)
+      #   - `man/roar.1` (the man page)
+      #   - `man/install.sh` (the man-page installer helper)
+      #   - `README.md` and `LICENSE` (if present)
+      #
+      # Layout inside the tarball is `roar-<version>/...` so an
+      # extraction in `/tmp` produces a single directory.
+      # ---------------------------------------------------------------
+      - name: Package artifact
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          STAGE="build/release/roar-$VERSION"
+          mkdir -p "$STAGE/man"
+
+          cp -R build/release/roar.app "$STAGE/roar.app"
+          cp man/roar.1                "$STAGE/man/roar.1"
+          cp man/install.sh            "$STAGE/man/install.sh"
+          [ -f README.md ] && cp README.md "$STAGE/README.md" || true
+          [ -f LICENSE ]   && cp LICENSE   "$STAGE/LICENSE"   || true
+
+          tar -C build/release \
+              -czf "build/release/roar-$VERSION.tar.gz" \
+              "roar-$VERSION"
+
+          # Also produce a bare `.app.zip` for users who only want
+          # the binary. ditto preserves Apple-extended attributes
+          # (com.apple.ResourceFork, codesign signatures) that the
+          # tar invocation above intentionally strips for
+          # cross-platform extraction friendliness.
+          ditto -c -k --keepParent --symlinks \
+            "$STAGE/roar.app" \
+            "build/release/roar-$VERSION.app.zip"
+
+          # Emit a sha256 of every distributable so users can
+          # verify downloads. shasum is BSD on macOS — explicit
+          # `-a 256` for SHA-256.
+          (
+            cd build/release
+            shasum -a 256 \
+              "roar-$VERSION.tar.gz" \
+              "roar-$VERSION.app.zip" \
+              > "roar-$VERSION.sha256"
+          )
+
+      - name: Create GitHub Release
+        # `softprops/action-gh-release` is the de-facto standard
+        # for "create release + upload artifacts" — it accepts a
+        # glob of files to attach and handles the API churn around
+        # creating drafts vs. published releases.
+        #
+        # Pinned to a specific commit SHA rather than `@v2` so a
+        # compromise of the upstream tag (or a maintainer rewriting
+        # the v2 ref) can't silently inject malicious code into our
+        # release pipeline. The trailing comment notes the human-
+        # readable version so Dependabot can bump both the SHA and
+        # the comment in lockstep.
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
+        with:
+          # When the workflow was triggered by a tag push,
+          # `github.ref` is the tag ref; the action uses that to
+          # name the release. For `workflow_dispatch`, we pass
+          # `tag_name` explicitly.
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            build/release/roar-*.tar.gz
+            build/release/roar-*.app.zip
+            build/release/roar-*.sha256
+
+      # ---------------------------------------------------------------
+      # Sync the Homebrew cask. After the release artifacts are
+      # public on GitHub, check out `dalemyers/homebrew-tap`,
+      # rewrite `Casks/roar.rb`'s `version` and `sha256` against
+      # this build's `.app.zip`, and open a pull request. The
+      # tap maintainer merges the PR to make the new version
+      # `brew install`-able.
+      #
+      # The source of truth for the cask formula's static fields
+      # (URL pattern, dependencies, `app`/`binary`/`manpage`
+      # stanzas, zap targets) lives at
+      # `homebrew-tap/Casks/roar.rb` in this repo — we copy that
+      # file into the tap and overwrite just the two version-
+      # bumped lines, so manual edits to the cask propagate
+      # automatically.
+      #
+      # Skips silently when the `HOMEBREW_TAP_TOKEN` secret is
+      # absent so the workflow stays usable while the tap repo
+      # is being bootstrapped.
+      # ---------------------------------------------------------------
+      - name: Update Homebrew tap
+        env:
+          # PAT scoped with `repo` write access to
+          # `dalemyers/homebrew-tap`. NOT the default
+          # `GITHUB_TOKEN` because that token's scope is
+          # restricted to THIS repo and cannot push to another.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Skip silently when the tap-publishing PAT isn't
+          # configured — keeps the workflow usable while the
+          # tap repo is being bootstrapped. The `if:` form
+          # (`if: ${{ secrets.X != '' }}`) is rejected by
+          # actionlint because secrets are not available in
+          # job/step-level `if` contexts, so the gate lives
+          # here instead.
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set; skipping tap update."
+            exit 0
+          fi
+          VERSION="${RELEASE_TAG#v}"
+          # SHA of the .app.zip — the cask installs the
+          # ditto-packaged artifact (which preserves the
+          # notarisation receipt), not the tar.gz.
+          SHA256="$(shasum -a 256 "build/release/roar-$VERSION.app.zip" | awk '{print $1}')"
+
+          # Stage the tap update under build/ so the checkout
+          # doesn't conflict with the source repo's working tree.
+          #
+          # The token is passed via `http.extraheader` rather than
+          # the conventional `https://x-access-token:$TOKEN@host`
+          # URL form. GitHub Actions auto-masks known secrets in
+          # logs, but the masking is best-effort (a URL-encoded
+          # or otherwise-transformed copy of the token wouldn't
+          # always match), and tokens-in-URLs land in places
+          # masking can't reach: `git remote -v` output, the
+          # process table during the clone, error messages from
+          # `git` that print the remote URL verbatim. The bearer-
+          # header form keeps the token off the URL entirely; the
+          # `-c http.extraheader=` flag is consumed by git and
+          # not stored in the cloned repo's config, so subsequent
+          # `git push` calls below need their own `-c` flag.
+          TAP_DIR="build/homebrew-tap"
+          AUTH_HEADER="Authorization: bearer $HOMEBREW_TAP_TOKEN"
+          git -c http.extraheader="$AUTH_HEADER" clone \
+            https://github.com/dalemyers/homebrew-tap.git \
+            "$TAP_DIR"
+
+          # Branch named for the version so consecutive releases
+          # don't collide on a single open PR.
+          BRANCH="bump-roar-$VERSION"
+          (
+            cd "$TAP_DIR"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -B "$BRANCH"
+          )
+
+          # Copy the source-of-truth cask file from the project
+          # repo into the tap, then rewrite the two
+          # version-bumped lines. Using `sed -i.bak` because BSD
+          # sed (macos-latest runner) requires the backup-suffix
+          # argument; the .bak file is deleted immediately after.
+          mkdir -p "$TAP_DIR/Casks"
+          cp homebrew-tap/Casks/roar.rb "$TAP_DIR/Casks/roar.rb"
+          sed -i.bak \
+            -e "s|^  version \".*\"|  version \"$VERSION\"|" \
+            -e "s|^  sha256 \".*\"|  sha256 \"$SHA256\"|" \
+            "$TAP_DIR/Casks/roar.rb"
+          rm "$TAP_DIR/Casks/roar.rb.bak"
+
+          # Bail out if the cask file is identical to what's
+          # already in the tap — e.g. re-running the workflow
+          # via `workflow_dispatch` against an already-published
+          # tag should be a no-op rather than a confusing empty
+          # PR.
+          (
+            cd "$TAP_DIR"
+            if git diff --quiet -- Casks/roar.rb; then
+              echo "Cask already at $VERSION; no PR needed."
+              exit 0
+            fi
+            git add Casks/roar.rb
+            git commit -m "Bump roar to $VERSION"
+            # `--force-with-lease` keeps us from clobbering a
+            # concurrent edit to the same branch on the tap; the
+            # bearer header is re-supplied here because the clone
+            # above did not persist it into the repo config.
+            git -c http.extraheader="$AUTH_HEADER" \
+              push --force-with-lease origin "$BRANCH"
+          )
+
+          # Open the PR via the GitHub API. Using `gh` directly
+          # (preinstalled on macos-latest) is shorter than
+          # invoking a third-party action and keeps the PR shape
+          # under workflow control. The body is built via heredoc
+          # so the YAML's indentation doesn't bleed into the
+          # rendered Markdown. `--repo` targets the tap; `--head`
+          # points at the just-pushed branch.
+          BODY=$(cat <<EOF
+          Automated bump from dalemyers/Roar release ${RELEASE_TAG}.
+
+          - Version: \`$VERSION\`
+          - SHA-256 (\`roar-$VERSION.app.zip\`): \`$SHA256\`
+          - Release: https://github.com/dalemyers/Roar/releases/tag/${RELEASE_TAG}
+
+          Sourced from \`homebrew-tap/Casks/roar.rb\` in the source repo.
+          EOF
+          )
+          GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh pr create \
+            --repo dalemyers/homebrew-tap \
+            --head "$BRANCH" \
+            --base main \
+            --title "Bump roar to $VERSION" \
+            --body "$BODY" \
+            || echo "PR already exists for $BRANCH; not re-opening."
+
+      # ---------------------------------------------------------------
+      # Clean up the temp keychain. `if: always()` so a failed
+      # notarisation doesn't leave credentials sitting on the
+      # runner — even though GitHub destroys the VM after the
+      # job, defence-in-depth is cheap and the rule of "leave the
+      # system how you found it" applies.
+      # ---------------------------------------------------------------
+      - name: Delete temp keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
