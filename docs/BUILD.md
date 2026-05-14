@@ -1,169 +1,114 @@
-# Installing Roar
+# Building Roar from source
 
-Roar is a macOS-only tool that builds from source today. There is no
-Homebrew formula yet, and the binary is distributed as a signed +
-notarised `.app` from GitHub Releases for tagged versions.
+This document is for **contributors and people who want to hack on
+Roar**. If you just want to use the tool, install via Homebrew —
+see the [README](../README.md#install) for `brew install --cask
+dalemyers/tap/roar` and friends.
 
 ## Requirements
 
 | Requirement                 | Version             |
 |-----------------------------|---------------------|
 | macOS                       | 13.0 or later       |
-| Xcode (Command Line Tools)  | 15 or later         |
+| Xcode (or Command Line Tools) | 15 or later       |
 | Swift                       | 5.10 (bundled with Xcode) |
-| [`xcodegen`](https://github.com/yonaskolb/XcodeGen) | 2.40+        |
-| Optional: `mandoc`          | for `man` page rendering on macOS |
+| [`xcodegen`](https://github.com/yonaskolb/XcodeGen) | 2.40+ |
+| Optional: `rsvg-convert`    | only needed if you edit `Resources/icon.svg` and want to regenerate `Resources/Roar.icns` |
+| Optional: `swiftlint`       | matches the CI lint gate; install via `brew install swiftlint` |
 
-`xcodegen` regenerates `Roar.xcodeproj` from `project.yml`. The
-`.xcodeproj` is checked in for IDE convenience but `project.yml` is
-the source of truth.
+`xcodegen` regenerates `Roar.xcodeproj` from `project.yml`.
+`project.yml` is the source of truth — the `.xcodeproj` is generated
+each time and **not** checked into git.
 
 ```sh
 brew install xcodegen
 ```
 
-## Build from source
-
-Clone, regenerate the project, and run the test suite to verify your
-toolchain:
+## Build
 
 ```sh
 git clone https://github.com/dalemyers/Roar.git
 cd Roar
 xcodegen generate
 xcodebuild -project Roar.xcodeproj -scheme roar -configuration Release build
-xcodebuild -project Roar.xcodeproj -scheme roar -destination 'platform=macOS' test
 ```
 
-The build output lives in DerivedData; to find the built `.app`:
-
-```sh
-xcodebuild -project Roar.xcodeproj -scheme roar -configuration Release \
-    -showBuildSettings 2>/dev/null \
-    | awk -F= '/^[[:space:]]*BUILT_PRODUCTS_DIR/{gsub(/^ +/,"",$2);print $2}'
-```
-
-## Install the `.app`
-
-Copy the built bundle into `/Applications` so LaunchServices treats
-Roar as a normal app (this is what lets notifications come from
-"Roar" with a proper icon in Notification Center):
+Find the resulting `.app`:
 
 ```sh
 APP=$(xcodebuild -project Roar.xcodeproj -scheme roar -configuration Release \
     -showBuildSettings 2>/dev/null \
     | awk -F= '/^[[:space:]]*BUILT_PRODUCTS_DIR/{gsub(/^ +/,"",$2);print $2}')
-cp -R "$APP/roar.app" /Applications/
+echo "Built bundle: $APP/Roar.app"
 ```
 
-Roar uses `LSUIElement: true` so it does **not** appear in the Dock
-or the application switcher; it's a CLI tool that happens to be
-packaged as an app bundle because `UNUserNotificationCenter` requires
-one.
+Roar uses `LSUIElement: true` so the built bundle does **not** appear
+in the Dock or application switcher; it's a CLI that happens to be
+packaged as an `.app` because `UNUserNotificationCenter` requires a
+bundle.
 
-## Install the CLI
-
-The binary inside the bundle is the actual CLI entry point. Symlink
-it onto your `PATH`:
+## Run the test suite
 
 ```sh
-ln -sf /Applications/roar.app/Contents/MacOS/roar /usr/local/bin/roar
-# or under ~/.local/bin if you'd rather not need sudo
-mkdir -p ~/.local/bin
-ln -sf /Applications/roar.app/Contents/MacOS/roar ~/.local/bin/roar
+xcodebuild -project Roar.xcodeproj -scheme roar -destination 'platform=macOS' test
 ```
 
-Verify:
+CI (`.github/workflows/ci.yml`) runs this on every push to `main` and
+every PR. The project's build settings enable
+`SWIFT_TREAT_WARNINGS_AS_ERRORS = YES`, so any new warning fails the
+build.
+
+## Lint
 
 ```sh
-roar --version
-roar --help
+swiftlint --strict
 ```
 
-## Install the man page
+`.swiftlint.yml` encodes the project's tuned rule set. CI uses
+`--strict` so any new lint warning fails the workflow. Local edits
+should produce a clean `swiftlint --strict` before pushing.
+
+## Install your local build
+
+If you want to test your build by `roar`-ing from the shell, replace
+the installed bundle with the freshly-built one:
 
 ```sh
-./man/install.sh           # per-user, into ~/.local/share/man
-./man/install.sh --system  # /usr/local/share/man (needs sudo)
+# Use the $APP from the BUILT_PRODUCTS_DIR recipe above.
+sudo rm -rf /Applications/Roar.app
+ditto "$APP/Roar.app" /Applications/Roar.app
+
+# Re-register so LaunchServices picks up the new build and
+# `usernoted` refreshes its icon cache.
+/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
+  -f /Applications/Roar.app
+killall usernoted 2>/dev/null || true
 ```
 
-If `man roar` doesn't resolve afterwards, you may need to add the
-per-user man directory to `MANPATH`:
+The Homebrew-managed symlinks in `/opt/homebrew/bin/roar` and
+`/opt/homebrew/share/man/man1/roar.1` still point inside the
+bundle, so they automatically resolve to your local build after
+the `ditto`.
+
+## Regenerate the app icon
+
+`Resources/Roar.icns` is a generated artifact. The source is
+`Resources/icon.svg`. After editing the SVG, regenerate:
 
 ```sh
-echo 'export MANPATH="$HOME/.local/share/man:${MANPATH:-}"' >> ~/.zshrc
+brew install librsvg                 # one-time, for `rsvg-convert`
+./scripts/generate-icon.sh
 ```
 
-## Granting notification permission
+Commit both `Resources/icon.svg` and the regenerated
+`Resources/Roar.icns` together — the build phase that bundles the
+icon reads the `.icns`, not the `.svg`.
 
-On the first `roar send` invocation, Roar requests **provisional**
-notification authorization. macOS grants this silently — no permission
-dialog, no blocking prompt — so cron / launchd / CI jobs can post
-without anyone tapping anything. The trade-off: provisional
-notifications post quietly to Notification Center (no banner, no
-sound, no badge break-through) until the user promotes the app.
+## Producing a signed, notarised build
 
-To promote:
-
-- Tap **Keep** on the first notification Roar delivers, **or**
-- Open **System Settings → Notifications → Roar** and enable the
-  alert style you want.
-
-Once promoted, all subsequent notifications post with full
-affordances. The provisional state survives across reboots.
-
-If notification permission has been denied at some point and you want
-to re-enable it:
-
-1. System Settings → Notifications → scroll to **Roar**.
-2. Toggle **Allow Notifications** on.
-3. Choose Banner or Alert.
-
-## Signed releases (for non-buildable consumers)
-
-Tagged commits (`v*`) trigger a GitHub Actions release workflow that:
-
-1. Builds Roar with the project's Developer ID Application
-   certificate.
-2. Notarises the bundle via `xcrun notarytool`.
-3. Staples the notarisation ticket onto `roar.app`.
-4. Publishes a `.tar.gz`, `.app.zip`, and a `sha256` manifest to a
-   new GitHub Release.
-
-Download from the [Releases page](https://github.com/dalemyers/Roar/releases),
-verify the checksum, and install:
-
-```sh
-shasum -a 256 roar-v3.0.0.app.zip
-# compare against roar-v3.0.0.sha256
-unzip roar-v3.0.0.app.zip -d /Applications/
-ln -sf /Applications/roar.app/Contents/MacOS/roar /usr/local/bin/roar
-```
-
-## Uninstall
-
-```sh
-rm -f /usr/local/bin/roar ~/.local/bin/roar
-rm -rf /Applications/roar.app
-rm -f ~/.local/share/man/man1/roar.1 /usr/local/share/man/man1/roar.1
-
-# Optional: drop the bundle's notification permissions and history
-# (this clears delivered + pending notifications and the notification
-# permission record so a fresh install gets the first-run experience).
-defaults delete io.myers.roar 2>/dev/null
-osascript -e 'tell application "NotificationCenter" to quit' 2>/dev/null
-killall usernoted 2>/dev/null    # respawned by launchd
-```
-
-## Verifying installation
-
-```sh
-which roar                       # /usr/local/bin/roar
-ls -l "$(which roar)"            # symlink → /Applications/roar.app/...
-roar --version                   # prints the version baked into the binary
-roar settings                    # prints the OS-side notification settings
-roar send --body "It works"      # should produce a banner / NC entry
-```
-
-If `roar send` produces no banner and no Notification Center entry,
-see [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
+Local builds default to ad-hoc signing (`CODE_SIGN_IDENTITY = "-"`),
+which works for testing but won't pass Gatekeeper on someone else's
+machine. The Developer ID + notarisation pipeline runs from CI on
+every `v*` tag push — see the
+[`CI / release` section of the README](../README.md#ci--release) for
+the secret provisioning and tag workflow.

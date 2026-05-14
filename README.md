@@ -34,8 +34,9 @@ exhaustive help text. Once the man page is installed (see [Build](#build)),
 
 ### Deeper docs
 
-- [`docs/INSTALL.md`](docs/INSTALL.md) — build, install the binary,
-  install the man page, register with LaunchServices.
+- [`docs/BUILD.md`](docs/BUILD.md) — build from source: requirements,
+  the `xcodegen` + `xcodebuild` flow, testing, lint, installing a
+  local build over the released one, and regenerating the app icon.
 - [`docs/COOKBOOK.md`](docs/COOKBOOK.md) — recipes: build-status
   banners, replyable prompts, scheduled reminders, in-place updates,
   attachment thumbnails.
@@ -184,31 +185,94 @@ OS / sandbox layer, not in `roar`.
 
 ## Install
 
+Requires macOS 13 (Ventura) or later. `roar` runs as a notification
+sender from the shell; you'll be asked once for notification
+permission the first time you `send`.
+
 ### Homebrew (recommended)
 
 ```sh
 brew install --cask dalemyers/tap/roar
 ```
 
-The cask installs `Roar.app` to `/Applications`, symlinks the `roar`
-binary onto your Homebrew bin path, and installs the man page so
-`man roar` works without any additional setup.
+That single command:
 
-### Manual
+- Downloads the notarised, stapled `Roar.app` from the latest GitHub
+  release.
+- Installs it to `/Applications/Roar.app`.
+- Symlinks the embedded binary onto your Homebrew bin path
+  (`/opt/homebrew/bin/roar` on Apple Silicon, `/usr/local/bin/roar`
+  on Intel) so `roar` works from any shell.
+- Symlinks the man page into Homebrew's manpath so `man roar` works
+  immediately.
 
-Download `roar-<version>.app.zip` from the
-[Releases](../../releases) page, unzip, drag `Roar.app` to
-`/Applications`, and either invoke directly
-(`/Applications/Roar.app/Contents/MacOS/roar`) or symlink it onto
-your PATH:
+Verify:
 
 ```sh
-ln -s /Applications/Roar.app/Contents/MacOS/roar /usr/local/bin/roar
+roar --version
+roar send --title "Hello from roar"
 ```
 
-The man page is bundled inside the .app at
-`Contents/Resources/man/man1/roar.1`; add the path to MANPATH or
-copy it into a Homebrew-managed manpath manually.
+Upgrade:
+
+```sh
+brew update && brew upgrade --cask dalemyers/tap/roar
+```
+
+Uninstall (with state cleanup):
+
+```sh
+brew uninstall --cask --zap dalemyers/tap/roar
+```
+
+### Manual (no Homebrew)
+
+Download the latest `roar-<version>.app.zip` from the
+[Releases](../../releases) page (or fetch via `gh`):
+
+```sh
+VERSION=$(gh release view --repo dalemyers/Roar --json tagName -q .tagName)
+gh release download "$VERSION" --repo dalemyers/Roar --pattern '*.app.zip'
+unzip "roar-${VERSION#v}.app.zip"
+mv Roar.app /Applications/
+```
+
+Then put `roar` on your PATH and register the man page. Pick the
+paths matching your Homebrew prefix (or wherever your `bin`/`man`
+search paths point):
+
+```sh
+# Apple Silicon (Homebrew prefix /opt/homebrew):
+ln -sf /Applications/Roar.app/Contents/MacOS/roar \
+       /opt/homebrew/bin/roar
+ln -sf /Applications/Roar.app/Contents/Resources/man/man1/roar.1 \
+       /opt/homebrew/share/man/man1/roar.1
+
+# Intel (Homebrew prefix /usr/local) — also works on systems without
+# Homebrew if you have write access to /usr/local:
+ln -sf /Applications/Roar.app/Contents/MacOS/roar \
+       /usr/local/bin/roar
+sudo ln -sf /Applications/Roar.app/Contents/Resources/man/man1/roar.1 \
+            /usr/local/share/man/man1/roar.1
+```
+
+If you skip the manpath symlink, `man roar` still works once you
+add the embedded path to `MANPATH`:
+
+```sh
+export MANPATH="/Applications/Roar.app/Contents/Resources/man:${MANPATH:-}"
+```
+
+### Known limitations after install
+
+- **Notification icon shows Terminal, not Roar.** When `roar` is
+  exec'd from Terminal, macOS attributes notifications to
+  Terminal's `responsible_pid` for icon purposes, regardless of
+  `roar`'s own bundle identifier. Click handlers, permissions, and
+  every other attribution route to Roar correctly — only the
+  banner glyph is affected. Fix is non-trivial (requires a private
+  Darwin API in a way that interacts badly with the hardened
+  runtime) and tracked as a separate piece of work.
 
 ---
 
