@@ -1,0 +1,73 @@
+# Dependabot configuration for Roar.
+#
+# Keeps the third-party GitHub Actions used by the CI / nightly /
+# release workflows up to date. The workflows pin actions by commit
+# SHA (with a trailing `# vX.Y.Z` comment marking the human-readable
+# version — see `.github/workflows/release.yml` for an example). The
+# SHA-pinning is what makes those workflows safe against tag
+# rewriting at the upstream, but it means a human (or this bot) has
+# to bump the SHA every time the upstream cuts a new release.
+# Dependabot reads both the SHA and the trailing comment, and bumps
+# them in lockstep so a merged PR leaves the workflow consistent.
+#
+# Only first-party actions (`actions/checkout`, `actions/upload-artifact`)
+# remain on tag refs in the workflows; Dependabot still tracks them
+# under the `github-actions` ecosystem and will open a PR if a major
+# version ships, so we get drift detection there too without the
+# ongoing SHA-bump churn.
+
+version: 2
+
+updates:
+  # github-actions ecosystem covers every `uses:` directive in
+  # `.github/workflows/*.yml`. The `directory` is the repo root —
+  # Dependabot resolves the workflows directory itself; this entry
+  # does NOT control which subdirectory is scanned. Same root entry
+  # is the convention across the Dependabot docs.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # Weekly is the standard for this ecosystem — actions don't
+      # ship daily, and bumping more often would burn through the
+      # PR-review budget faster than the actual security upside
+      # would justify. Monday morning UTC fires before most weekly
+      # workflows would, so a bump merged early in the week is in
+      # place before the nightly fires on its own SHA-pinned action.
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Etc/UTC"
+
+    # Cap the number of concurrent open Dependabot PRs from this
+    # ecosystem. Above the default 5 makes review noisy without
+    # adding throughput. If three actions all bump in the same
+    # week the cap won't trip; if more do, the older ones queue
+    # and surface next week.
+    open-pull-requests-limit: 5
+
+    # Group all action bumps into one PR per week instead of one
+    # PR per action. A bumped SHA is rarely a meaningful diff on
+    # its own — the relevant context is "did anything go up" and
+    # "what did the upstream changelogs say." Reviewing once per
+    # week beats reviewing three near-identical PRs.
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+    commit-message:
+      # `chore(deps):` keeps the noise grouped under one type so
+      # the merged history is easy to ignore in a `git log`
+      # focused on feature work. The `include: scope` directive
+      # appends the bumped package name(s) to the message for
+      # quick triage.
+      prefix: "chore(deps)"
+      include: "scope"
+
+    # Default `main` target; explicit so it doesn't drift if the
+    # repo's default branch ever changes.
+    target-branch: "main"
+
+    labels:
+      - "dependencies"
+      - "github-actions"

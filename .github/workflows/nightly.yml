@@ -1,0 +1,124 @@
+# Nightly regression CI.
+#
+# Runs the same build + test against `main` once per day so that
+# Apple-side regressions (a new Xcode bumped onto `macos-latest`, a
+# new macOS SDK shipping with the runner image, a transitive
+# dependency update) surface independently of PR activity. Without
+# this, the first sign that `macos-latest` broke would be the next
+# PR — at which point it's bundled with whatever the PR is also
+# doing and harder to diagnose.
+#
+# Same shape as ci.yml's `test` job, deliberately. Sharing logic
+# via a reusable workflow would save ~20 lines but adds a `uses:`
+# indirection that obscures what the nightly is actually doing.
+# Two copies that drift independently is worse than nothing; one
+# copy + a yearly cross-check is fine.
+
+name: Nightly
+
+on:
+  schedule:
+    # 07:00 UTC daily. Roughly midnight Pacific, 08:00 UK — i.e.
+    # late enough that any Apple-side runner image update from the
+    # previous day's working hours has rolled out, and early enough
+    # that a maintainer sees the result before starting their day.
+    - cron: '0 7 * * *'
+  # Manual trigger for forcing a re-run after a failure or pinning
+  # an Apple bump without waiting for the next scheduled tick.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build & test (nightly)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # `main` only — nightly checks the public tip, not
+          # whatever branch was active last. Default checkout
+          # behaviour on a scheduled run already targets the default
+          # branch, but pinning explicitly here documents the
+          # intent.
+          ref: main
+
+      - name: Select Xcode 26
+        # Pin to Xcode 26 for the same reason as `ci.yml`: Roar's
+        # source depends on Foundation behaviour that only matches
+        # across SDK versions when the macOS 26 SDK is selected.
+        # See `.github/workflows/ci.yml` for the full rationale.
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null \
+                    | sort --version-sort \
+                    | tail -n 1)
+          if [[ -z "${XCODE}" ]]; then
+            echo "::error::Xcode 26 not found on this runner image." >&2
+            echo "Available Xcodes:" >&2
+            ls -d /Applications/Xcode_*.app 2>/dev/null >&2 || true
+            exit 1
+          fi
+          echo "Selecting ${XCODE}"
+          sudo xcode-select -s "${XCODE}"
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build & test
+        run: |
+          xcodebuild \
+            -project Roar.xcodeproj \
+            -scheme roar \
+            -destination 'platform=macOS' \
+            -resultBundlePath build/nightly.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-xcresult-${{ github.run_id }}
+          path: build/nightly.xcresult
+          retention-days: 30
+
+      - name: Notify on failure
+        # Opens (or refreshes) a tracking issue when the nightly
+        # fails so the maintainer sees a single durable signal
+        # instead of an email digest of every failed run. The
+        # `update_existing: true` flag means consecutive failures
+        # bump the same issue rather than spamming new ones.
+        #
+        # Requires `issues: write` — granted via the per-step
+        # permissions override below. If the repo's default
+        # permissions are stricter than read-only, this step will
+        # silently skip the issue creation rather than fail the
+        # workflow (the actual signal lives in the run status).
+        #
+        # Pinned to a specific commit SHA rather than `@v2` so a
+        # compromise of the upstream tag can't silently inject
+        # malicious code into the workflow. Trailing comment is
+        # the human-readable version Dependabot can update in
+        # lockstep with the SHA.
+        if: failure()
+        uses: JasonEtco/create-an-issue@1b14a70e4d8dc185e5cc76d3bec9eab20257b2c5  # v2.9.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          filename: .github/nightly-failure-template.md
+          update_existing: true
+        continue-on-error: true
+    permissions:
+      contents: read
+      issues: write

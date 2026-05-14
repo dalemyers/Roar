@@ -1,0 +1,12 @@
+.*.sw?
+.DS_Store
+DerivedData
+xcuserdata
+Ruby/*.zip
+Ruby/*.gem
+Ruby/vendor
+build
+
+# xcodegen-generated file (source of truth is project.yml info.properties)
+Resources/Info.plist
+Roar.xcodeproj

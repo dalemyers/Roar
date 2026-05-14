@@ -1,0 +1,158 @@
+# Roar continuous integration.
+#
+# Runs on every push to `main` and every pull request targeting it.
+# Two jobs run in parallel:
+#
+#   * `lint`  — SwiftLint against the tuned `.swiftlint.yml`. Warnings
+#               surface as PR annotations; only errors fail the
+#               workflow (matches the `.swiftlint.yml` policy).
+#   * `test`  — xcodegen → xcodebuild test. Treats warnings as errors
+#               via the project.yml setting; any regression fails.
+#
+# Both jobs are independent so a transient lint failure doesn't
+# starve a real test signal (and vice versa). The merge-blocking
+# rule should require BOTH to pass — set that up in the GitHub
+# branch protection UI; it can't be expressed in the workflow itself.
+#
+# Runner is `macos-latest`. The Xcode bundled there moves with
+# Apple's release cadence — but the *default* Xcode on the image
+# is often a couple of major versions behind the newest one
+# pre-installed. Roar's source depends on Foundation behaviour
+# that only matches across SDK versions when Xcode 26 (macOS 26
+# SDK) is selected: older SDKs return different values for
+# `URL.path` on schemes without a `//` authority, which breaks the
+# `--open-url` `mailto:` parse and the `file:` attachment
+# classifier. The `Select Xcode 26` step below pins explicitly and
+# fails loudly if a runner image regresses, instead of silently
+# sliding back to the older SDK and breaking those tests.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual trigger so a maintainer can re-run CI without pushing.
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref (force-push, PR push-over)
+# so CI doesn't pile up. Keep `main` runs (the default branch) so
+# the public status reflects the actual tip.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Read-only by default. Jobs that need write access (e.g. uploading
+# annotations) override per-job below.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-latest
+    # `checks: write` is needed for SwiftLint's
+    # `github-actions-logging` reporter to publish PR annotations.
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        # `brew install swiftlint` is the path of least resistance on
+        # macos-latest — the runner ships Homebrew preconfigured and
+        # SwiftLint's bottle is small (~30 MB). The action-driven
+        # `realm/SwiftLint` alternative spins a Docker layer that
+        # doesn't exist on the macOS runner, so brew is the only
+        # macOS-friendly path.
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        # `--reporter github-actions-logging` turns each violation
+        # into a `::warning::` / `::error::` annotation that the
+        # GitHub PR UI surfaces inline on the diff. The `.swiftlint.yml`
+        # already encodes which rules are errors vs warnings; only
+        # errors fail the job, by design (see config comments).
+        run: swiftlint --reporter github-actions-logging
+
+  test:
+    name: Build & test
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        # GitHub-hosted runner images install multiple Xcode versions
+        # side-by-side under `/Applications/Xcode_*.app`; the default
+        # picked by `xcode-select` is often not the newest. Glob for
+        # any `Xcode_26*.app`, sort by version, pick the highest, and
+        # `xcode-select -s` it. Fail loudly (with the list of what IS
+        # installed) if no Xcode 26 is present — that means the
+        # runner image regressed and we'd rather catch it here than
+        # in a downstream test diff.
+        run: |
+          set -euo pipefail
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null \
+                    | sort --version-sort \
+                    | tail -n 1)
+          if [[ -z "${XCODE}" ]]; then
+            echo "::error::Xcode 26 not found on this runner image." >&2
+            echo "Available Xcodes:" >&2
+            ls -d /Applications/Xcode_*.app 2>/dev/null >&2 || true
+            exit 1
+          fi
+          echo "Selecting ${XCODE}"
+          sudo xcode-select -s "${XCODE}"
+
+      - name: Install xcodegen
+        # `project.yml` is the source of truth for the Xcode project;
+        # `Roar.xcodeproj` is generated. The runner doesn't ship
+        # xcodegen, so install via brew before generating.
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen
+
+      - name: Show Xcode version
+        # Pinned to the step output for easy retrieval when
+        # diagnosing "passed in CI, fails locally" mismatches. The
+        # Select Xcode 26 step above already chose the toolchain;
+        # printing the version here confirms the selection took.
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build & test
+        # `-resultBundlePath` writes a `.xcresult` we upload below
+        # so failing test runs are inspectable without re-running.
+        # `-destination "platform=macOS"` is the documented
+        # destination string for a macOS-host scheme.
+        # `CODE_SIGNING_ALLOWED=NO` skips the codesign step on the
+        # CI build — the test bundle doesn't need a valid signature
+        # to execute, and bypassing the codesign keychain dance
+        # keeps the runner free of state.
+        run: |
+          xcodebuild \
+            -project Roar.xcodeproj \
+            -scheme roar \
+            -destination 'platform=macOS' \
+            -resultBundlePath build/ci.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Upload test results
+        # `if: always()` so the bundle is available even on a failed
+        # test run — that's the case we actually want to inspect.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ github.run_id }}
+          path: build/ci.xcresult
+          # 14-day retention is the GitHub default; keeping it
+          # explicit so a later change of the runner default
+          # doesn't silently change retention.
+          retention-days: 14
