@@ -197,6 +197,17 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          # `OTHER_CODE_SIGN_FLAGS=--timestamp` is required for
+          # notarisation: Apple's notary service rejects any
+          # signature that lacks a secure timestamp from Apple's
+          # timestamp server. v0.1.2 hit this — Apple returned
+          # `Archive contains critical validation errors` with
+          # `"The signature does not include a secure timestamp."`
+          # for both the arm64 and x86_64 slices of the main
+          # executable. Adding the flag here makes xcodebuild
+          # pass it through to every codesign invocation in the
+          # build, including the per-arch slice signing and the
+          # final bundle re-sign.
           xcodebuild \
             -project Roar.xcodeproj \
             -scheme roar \
@@ -207,6 +218,7 @@ jobs:
             CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_ENTITLEMENTS=Resources/roar.entitlements \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
             build
 
           # The built .app lands at a well-known location under
