@@ -13,7 +13,7 @@ whether the problem is in Roar or in the OS configuration.
 The most common cause is **provisional authorization**: the first
 time Roar runs, macOS grants it provisional auth silently. The
 trade-off is that notifications post quietly to Notification Center
-— no banner, no sound, no badge break-through.
+— no banner, no sound.
 
 Diagnose:
 
@@ -34,7 +34,7 @@ To promote to full authorization:
 
 After promotion, `roar settings` reports
 `authorization-status: authorized` and subsequent sends have
-banner+sound+badge affordances.
+banner+sound affordances.
 
 ## "`authorization-status: denied`"
 
@@ -51,11 +51,18 @@ scripts can branch on it.
 
 ## "I get `authorization-status: not-determined` every run"
 
+> **If you installed via Homebrew (`brew install --cask
+> dalemyers/tap/roar`), this is handled for you automatically.**
+> The cask drops `Roar.app` into `/Applications` and symlinks the
+> binary onto your Homebrew bin path, which is exactly the layout
+> LaunchServices needs — no manual `lsregister` step required.
+> Skip the rest of this section.
+
 Roar requests authorization on every cold start. If you keep seeing
 `not-determined`, the request is failing — usually because the
-bundle id isn't registered with LaunchServices. `lsregister` lives
-inside the CoreServices framework, so use the full path or alias
-it onto your `PATH`:
+bundle id isn't registered with LaunchServices. This only applies
+to manual installs; `lsregister` lives inside the CoreServices
+framework, so use the full path or alias it onto your `PATH`:
 
 ```sh
 /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f /Applications/Roar.app
@@ -64,7 +71,8 @@ it onto your `PATH`:
 If Roar is run from somewhere other than `/Applications`, every
 relaunch will potentially re-register and confuse the permission
 record. Install the `.app` into `/Applications` and `ln -s` the
-binary onto your `PATH`.
+binary onto your `PATH` (or just use the Homebrew cask, which
+does both for you).
 
 ## "I see the notification but it doesn't play a sound"
 
@@ -114,18 +122,6 @@ entitlement gates time-sensitive interruptions; `--interruption-level
 time-sensitive` works without it, because macOS lets unentitled
 apps request the level — it just defers to the user's Focus
 configuration for the actual break-through.)
-
-## "My badge doesn't update"
-
-`UNMutableNotificationContent.badge` updates the dock icon's badge,
-but Roar runs with `LSUIElement: true` and **does not appear in the
-Dock**. The badge number is still recorded; it'll show up if your
-notification gets summarised in Notification Center, but you won't
-see a Dock badge — Roar deliberately has no Dock presence.
-
-For a visible badge counter, post the notification under another
-app's bundle id via a different tool, or assign Roar a Dock icon by
-removing `LSUIElement: true` from `project.yml` and rebuilding.
 
 ## "My `--at` schedule fired immediately"
 

@@ -36,9 +36,9 @@ final class ForegroundPresentationTests: XCTestCase {
     func testAllOptionsParse() throws {
         let parsed = try XCTUnwrap(
             Send.parseForegroundPresentationOptions(
-                ["banner", "list", "sound", "badge"]))
-        XCTAssertEqual(parsed.options, [.banner, .list, .sound, .badge])
-        XCTAssertEqual(parsed.serialized, "banner,list,sound,badge")
+                ["banner", "list", "sound"]))
+        XCTAssertEqual(parsed.options, [.banner, .list, .sound])
+        XCTAssertEqual(parsed.serialized, "banner,list,sound")
     }
 
     func testCanonicalOrderIndependentOfInputOrder() throws {
@@ -63,13 +63,13 @@ final class ForegroundPresentationTests: XCTestCase {
     }
 
     /// `--foreground-presentation none` is rejected at parse time so
-    /// a `roar send --foreground-presentation none --badge-count 5`
+    /// a `roar send --foreground-presentation none --sound default`
     /// invocation surfaces the asymmetry between the send-side parser
     /// and the delegate-side deserializer (which refuses `none` for
     /// security). The previous behaviour accepted `none` at send time
-    /// and silently upgraded to `banner+list+sound+badge` at display
-    /// time — no diagnostic, no way for the caller to learn their
-    /// preference was discarded. The error message must point users
+    /// and silently upgraded to `banner+list+sound` at display time —
+    /// no diagnostic, no way for the caller to learn their preference
+    /// was discarded. The error message must point users
     /// at `--interruption-level passive` (the supported way to
     /// suppress attention-grabbing presentation).
     func testNoneSentinelRejectedAtParseTime() {
@@ -163,8 +163,8 @@ final class ForegroundPresentationTests: XCTestCase {
 
     func testDeserializeRoundTripsAllOptions() {
         let result = Send.deserializeForegroundPresentationOptions(
-            "banner,list,sound,badge")
-        XCTAssertEqual(result, [.banner, .list, .sound, .badge])
+            "banner,list,sound")
+        XCTAssertEqual(result, [.banner, .list, .sound])
     }
 
     /// `none` is explicitly NOT honoured on the delegate side — see
@@ -173,9 +173,8 @@ final class ForegroundPresentationTests: XCTestCase {
     /// notification with `roar.present.options = "none"` plus a
     /// `roar.exec.command` payload to create a visually-invisible
     /// but click-actionable surface. Returning `nil` here forces the
-    /// delegate to fall back to the framework default
-    /// (banner+list+sound+badge), so the click target is always
-    /// visible to the user.
+    /// delegate to fall back to its default (banner+list+sound), so
+    /// the click target is always visible to the user.
     func testDeserializeNoneReturnsNilForSecurity() {
         let result = Send.deserializeForegroundPresentationOptions("none")
         XCTAssertNil(
@@ -205,9 +204,9 @@ final class ForegroundPresentationTests: XCTestCase {
         // refuses it for the security reason documented in
         // `testDeserializeNoneReturnsNilForSecurity`.
         let inputs: [[String]] = [
-            ["banner"], ["list"], ["sound"], ["badge"],
-            ["banner", "list"], ["banner", "sound"], ["list", "badge"],
-            ["banner", "list", "sound", "badge"],
+            ["banner"], ["list"], ["sound"],
+            ["banner", "list"], ["banner", "sound"], ["list", "sound"],
+            ["banner", "list", "sound"],
         ]
         for input in inputs {
             let parsed = try XCTUnwrap(
@@ -246,13 +245,17 @@ final class ForegroundPresentationTests: XCTestCase {
     func testDelegateDefaultUnchanged() {
         // Pin the default option set so a future change touching
         // `willPresent` is forced to update this test and reconsider
-        // the surface area. The default carries `.list` and `.badge`
-        // for the reasons spelled out in the delegate comment — both
-        // are UN-era additions that NSUserNotificationCenter had no
-        // equivalent for.
+        // the surface area. The default carries `.list` for the
+        // reasons spelled out in the delegate comment (the UN-era
+        // separation of "appears in Notification Center" from "shows
+        // a banner" that NSUserNotificationCenter had no equivalent
+        // for). `.badge` is deliberately absent: Roar runs
+        // `LSUIElement: true` with no Dock tile, and no flag sets
+        // `content.badge`, so including the bit would be a no-op at
+        // best and misleading at worst.
         XCTAssertEqual(
             RoarAppDelegate.defaultForegroundPresentationOptions,
-            [.banner, .list, .sound, .badge]
+            [.banner, .list, .sound]
         )
     }
 }

@@ -284,7 +284,7 @@ absent.
 
 ```sh
 curl -fsSL -o /tmp/avatar.jpg "https://example.com/avatar.jpg"
-roar send --body "New badge" --attachment /tmp/avatar.jpg
+roar send --body "New avatar" --attachment /tmp/avatar.jpg
 rm /tmp/avatar.jpg
 ```
 

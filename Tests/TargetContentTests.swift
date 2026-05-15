@@ -2,33 +2,12 @@ import XCTest
 import ArgumentParser
 @testable import roar
 
-/// Pinned behaviour for `--badge-count` and `--target-content-id`
-/// validators. These are intentionally small surfaces — the actual
-/// content-property assignment is a one-liner — but the validators
-/// catch the common misuses (negative badge, NUL byte in id) that
-/// would otherwise produce silent downstream failures.
-final class BadgeAndTargetContentTests: XCTestCase {
-
-    // MARK: - validateBadgeCount
-
-    func testNilAccepted() throws {
-        try Send.validateBadgeCount(nil)
-    }
-
-    func testZeroAccepted() throws {
-        // 0 is the documented "clear the badge" value.
-        try Send.validateBadgeCount(0)
-    }
-
-    func testPositiveAccepted() throws {
-        try Send.validateBadgeCount(42)
-    }
-
-    func testNegativeRejected() {
-        XCTAssertThrowsError(try Send.validateBadgeCount(-1)) {
-            XCTAssertTrue($0 is ValidationError, "got \(type(of: $0))")
-        }
-    }
+/// Pinned behaviour for the `--target-content-id` validator (it
+/// reuses `validateRequestIdentifier` with a custom flag name). The
+/// validator catches the common NUL / control-char / length misuses
+/// that would otherwise produce silent downstream failures at the
+/// XPC bridge.
+final class TargetContentTests: XCTestCase {
 
     // MARK: - validateRequestIdentifier with custom flag name
 

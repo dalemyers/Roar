@@ -248,18 +248,8 @@ final class RoarAppDelegate: NSObject, NSApplicationDelegate, UNUserNotification
     /// vanished. In practice roar exits within ~100ms of `add(_:)`, so
     /// `willPresent` rarely fires — but when it does, omitting `.list`
     /// makes the notification disappear from NC and surprises users.
-    ///
-    /// `.badge` is the UN-era separation of "set the app-icon badge
-    /// number" from the rest of the presentation surface. NS rolled
-    /// badging into the notification post itself, so the original port
-    /// omitted it — which meant a notification with `--badge-count`
-    /// arriving while the bundle was still alive (the `--wait` case,
-    /// or a click-handler relaunch racing a second notification) would
-    /// post normally but never update the dock badge. Including
-    /// `.badge` here lets the framework apply the content's `badge`
-    /// value to the app icon as part of presentation.
     nonisolated static let defaultForegroundPresentationOptions:
-        UNNotificationPresentationOptions = [.banner, .list, .sound, .badge]
+        UNNotificationPresentationOptions = [.banner, .list, .sound]
 
     /// Allow notifications to display while this process is the foreground app.
     /// Without this, banner-style notifications may be suppressed.

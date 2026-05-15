@@ -258,7 +258,7 @@ match result.returncode:
 Roar requests *provisional* authorization on first run. macOS grants
 this silently, so a fresh CI runner won't wedge on a modal. The
 trade-off is that notifications post quietly to Notification Center
-(no banner / sound / badge) until the user promotes the app —
+(no banner / sound) until the user promotes the app —
 acceptable for an unattended runner.
 
 If your CI workflow includes an interactive approval gate via
@@ -335,7 +335,7 @@ Roar caps identifiers (and `--thread-id`, `--target-content-id`,
 `--filter-criteria`) at 256 characters; longer values are
 rejected at validation time. Rationale and the underlying
 framework behaviour are in
-[Security → identifier length cap](SECURITY.md#13-identifier-length-cap).
+[Security → identifier length cap](SECURITY.md#12-identifier-length-cap).
 
 ### `--at` is local time unless you specify a zone
 
@@ -371,17 +371,16 @@ case $? in
 esac
 ```
 
-### "What's the count?"
+### "Replace-in-place progress"
 
 ```sh
 roar send --identifier dl --body "Downloading: queued"
 
 while read -r progress; do
-    roar send --identifier dl --body "Downloading: $progress" \
-              --badge-count "$progress"
+    roar send --identifier dl --body "Downloading: $progress"
 done < <(curl -fsSL https://api.example.com/progress | jq -r '.percent')
 
-roar send --identifier dl --body "Download complete" --badge-count 0
+roar send --identifier dl --body "Download complete"
 ```
 
 ### "Confirm before destructive op"

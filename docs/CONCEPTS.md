@@ -78,14 +78,13 @@ first send.
 
 - **Provisional**: granted *silently*, no permission dialog.
   Notifications post quietly to Notification Center — no
-  banner, no sound, no badge break-through. Useful for
-  unattended invocations (cron / launchd / CI) that
-  shouldn't block on a modal dialog. Roar's first-run
-  experience uses this.
+  banner, no sound. Useful for unattended invocations (cron /
+  launchd / CI) that shouldn't block on a modal dialog. Roar's
+  first-run experience uses this.
 - **Full**: the user has explicitly accepted notifications,
   either by tapping **Keep** on a provisional notification or
   by flipping the switch in **System Settings → Notifications →
-  Roar**. Banners, sounds, and badges all work normally.
+  Roar**. Banners and sounds work normally.
 
 `roar settings` shows the current state under
 `authorization-status: <value>` — see
@@ -180,14 +179,14 @@ A notification has two distinct delivery contexts:
   time `usernoted` delivers the notification. This is the
   common case — for non-`--wait` sends, Roar exits ~100 ms
   after `add(_:)` returns. The system's default presentation
-  routing applies; banner / list / sound / badge are all
-  decided per the user's per-app settings.
+  routing applies; banner / list / sound are all decided per
+  the user's per-app settings.
 - **Foreground delivery**: the notification fires while Roar
   is *still running* — typically only in the `--wait` flow,
   where Roar holds the runloop open to receive a click. In
   this case the framework asks Roar's delegate
   (`willPresent`) what presentation to use. By default Roar
-  returns `[.banner, .list, .sound, .badge]`; the
+  returns `[.banner, .list, .sound]`; the
   `--foreground-presentation` flag overrides that on a per-
   notification basis.
 
@@ -284,8 +283,8 @@ Roar disambiguates the two startup roles by inspecting
 The 10-second fallback timer matters because cold-launched
 bundles (Gatekeeper scan racing first-after-sleep activation)
 can take several seconds to dispatch the delegate callback.
-The previous 3-second window was too tight — empirically the
-worst observed dispatch latencies cluster around 5-8 seconds.
+Empirically the worst observed dispatch latencies cluster around 
+5-8 seconds.
 
 ## Permissions and distribution
 

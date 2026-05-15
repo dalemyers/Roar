@@ -43,20 +43,19 @@ extension Send {
             ("banner", .banner),
             ("list", .list),
             ("sound", .sound),
-            ("badge", .badge),
         ]
 
     /// Sentinel value the user supplies in place of any option name to
     /// request an explicitly empty presentation set (notification
-    /// posts but is neither shown as a banner nor sounded nor badged).
-    /// An empty string would otherwise be indistinguishable from "user
-    /// passed `--foreground-presentation ""` by accident."
+    /// posts but is neither shown as a banner nor sounded). An empty
+    /// string would otherwise be indistinguishable from "user passed
+    /// `--foreground-presentation ""` by accident."
     static let foregroundPresentationNoneSentinel = "none"
 
     /// Parse the user-supplied `--foreground-presentation` array (one
     /// entry per `--foreground-presentation` flag occurrence; each
-    /// entry is a single name from `banner`/`list`/`sound`/`badge`,
-    /// or the literal `none`).
+    /// entry is a single name from `banner`/`list`/`sound`, or the
+    /// literal `none`).
     ///
     /// The flag is repeat-flag-style (`--foreground-presentation
     /// banner --foreground-presentation list`) for consistency with
@@ -66,7 +65,7 @@ extension Send {
     ///
     /// Returns `nil` when the user did not pass the flag (the empty
     /// array — `[]`). The delegate then falls back to its hardcoded
-    /// banner+list+sound+badge default. On a non-empty but malformed
+    /// banner+list+sound default. On a non-empty but malformed
     /// value, throws so the user sees a usage diagnostic at send time
     /// instead of a silent default at display time.
     ///
@@ -121,10 +120,10 @@ extension Send {
                 // the send-side parser accepted 'none' it produced a
                 // silent display-time upgrade to defaults — a
                 // legitimate `roar send --foreground-presentation none
-                // --badge-count 5` invocation would fall through to
-                // the framework's banner+list+sound+badge defaults
-                // rather than the empty option set the user
-                // requested, with no diagnostic. Reject at parse time
+                // --sound default` invocation would fall through to
+                // the framework's banner+list+sound defaults rather
+                // than the empty option set the user requested, with
+                // no diagnostic. Reject at parse time
                 // so the user sees the asymmetry at send time, and
                 // can switch to the supported way to suppress
                 // attention-grabbing presentation.
@@ -189,7 +188,7 @@ extension Send {
     ///
     /// * A notification posted with an empty presentation set is
     ///   visually invisible (no banner, no Notification Center entry,
-    ///   no sound, no badge) but is still click-actionable. A
+    ///   no sound) but is still click-actionable. A
     ///   same-bundle-id spoofer could post a stealth notification
     ///   with `roar.present.options = "none"` plus a malicious
     ///   `roar.exec.command` (gated only by the `--allow-shell-on-click`
@@ -199,15 +198,15 @@ extension Send {
     ///   send-time gate; the *visibility* gate is what prevents the
     ///   user from being tricked into clicking an invisible target.
     /// * Roar's own `--foreground-presentation none` is a legitimate
-    ///   send-time preference (use cases: silently update a badge
-    ///   count, post a record for `roar list` only). But that
+    ///   send-time preference (use case: post a record for `roar
+    ///   list` only, with no foreground attention). But that
     ///   preference is only ever consulted by `willPresent` when the
     ///   notification arrives *while this process is foreground*,
     ///   which is exactly the window where a stealth presentation is
     ///   most exploitable. The user receives no visual cue that a
     ///   notification was just posted under our bundle id.
-    /// * The fallback when this returns `nil` is the framework
-    ///   default (banner+list+sound+badge), which is the safe choice:
+    /// * The fallback when this returns `nil` is the delegate's
+    ///   default (banner+list+sound), which is the safe choice:
     ///   visible to the user, so a click can never happen against an
     ///   invisible surface.
     ///

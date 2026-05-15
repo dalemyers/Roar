@@ -115,8 +115,8 @@ Yes — macOS requires per-bundle notification permission.
 
 On first send, Roar requests **provisional** authorization
 silently (no dialog, no blocking prompt). Provisional notifications
-post quietly to Notification Center: no banner, no sound, no
-badge break-through. To promote to full auth, either:
+post quietly to Notification Center: no banner, no sound. To
+promote to full auth, either:
 
 - Tap **Keep** on the first notification Roar delivers, **or**
 - Open **System Settings → Notifications → Roar** and enable
@@ -125,7 +125,7 @@ badge break-through. To promote to full auth, either:
 Once promoted, every subsequent notification posts with full
 affordances. The promotion survives reboots.
 
-### Why doesn't my notification have a banner / sound / badge?
+### Why doesn't my notification have a banner / sound?
 
 Almost always: you're still under provisional auth. See the
 question above. `roar settings` will show
@@ -157,9 +157,8 @@ curl -fsSL -o /tmp/poster.png 'https://…/poster.png'
 roar send --title "New release" --attachment /tmp/poster.png
 ```
 
-The previous remote-fetch path was deleted on review — keeping
-it required maintaining an HTTP client (SSRF screening, size
-caps, redirect guard) inside a CLI tool that the user can
+Supporting remote fetch requires maintaining an HTTP client (SSRF screening,
+size caps, redirect guard, etc.) inside a CLI tool that the user can
 replace with one `curl` invocation.
 
 ### Can I send rich text / Markdown / HTML in the body?
@@ -349,8 +348,7 @@ think about each one. See [Reference →
 `http://` URLs. Maintaining a remote-fetch path inside a CLI
 tool requires an HTTP client, an SSRF-screening allow-list, a
 size cap, a redirect guard, etc., all of which the user can
-replace with `curl -o /tmp/file URL`. The previous remote-
-fetch path was removed on review.
+replace with `curl -o /tmp/file URL`. 
 
 For the symlink / control-character / path-walk hardening
 applied to local paths, see

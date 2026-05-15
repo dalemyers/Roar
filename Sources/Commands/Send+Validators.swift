@@ -462,26 +462,6 @@ extension Send {
         return trimmed
     }
 
-    /// Reject `--badge-count` values that aren't valid non-negative
-    /// integers. `nil` means the flag was not passed; nothing to check.
-    /// Negative values are rejected up-front because
-    /// `UNMutableNotificationContent.badge` is typed `NSNumber?` but
-    /// the framework interprets negatives as "no change" or clamps
-    /// silently depending on platform version — both surprise users
-    /// who typed `--badge-count -1` expecting clearing semantics.
-    /// To clear an existing badge, use `--badge-count 0`.
-    ///
-    /// `nonisolated static` so tests can pin the rule.
-    static func validateBadgeCount(_ count: Int?) throws {
-        guard let count else { return }
-        guard count >= 0 else {
-            throw ValidationError(
-                "--badge-count must be >= 0 (got \(count)). Use 0 to clear an "
-                + "existing badge."
-            )
-        }
-    }
-
     /// Pure-function counterpart for tests.
     ///
     /// The control-character / length checks mirror

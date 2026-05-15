@@ -28,7 +28,7 @@ mode).
 - `roar list`     list delivered and pending notifications
 - `roar dismiss`  remove a notification by identifier
 - `roar clear`    remove notifications by scope (delivered / pending / all)
-- `roar settings` print current notification settings (Focus, badges, etc.)
+- `roar settings` print current notification settings (Focus, alert style, etc.)
 
 `roar --help` and `roar <subcommand> --help` show every flag with
 exhaustive help text. Once the man page is installed (see
@@ -64,8 +64,8 @@ back here. The source lives in `docs/`:
   scheme allow-list, `--exec` consent gate, attachment hardening,
   same-bundle-id spoofing limits, userInfo bounds.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — symptom →
-  fix for silent notifications, missing badges, Focus filters,
-  sound-name lookups, provisional auth, debug logging.
+  fix for silent notifications, Focus filters, sound-name
+  lookups, provisional auth, debug logging.
 - [`docs/BUILD.md`](docs/BUILD.md) — build from source: requirements,
   the `xcodegen` + `xcodebuild` flow, testing, lint, installing a
   local build over the released one, and regenerating the app icon.

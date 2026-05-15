@@ -83,10 +83,10 @@ Categories of message that land on stderr today, for context:
 - `ValidationError` diagnostics from Roar's own validators
   (length caps, control-character rejections, scheme rejections,
   schedule-bound rejections, etc.).
-- The one-time provisional-auth warning emitted when `--sound`,
-  `--interruption-level time-sensitive`, or `--badge-count` is
-  set under provisional authorization (the affordance is being
-  silently downgraded).
+- The one-time provisional-auth warning emitted when `--sound`
+  or `--interruption-level time-sensitive` is set under
+  provisional authorization (the affordance is being silently
+  downgraded).
 - `roar dismiss` per-id "unknown identifier" reports.
 - Click-handler diagnostics when `ROAR_DEBUG` is set in the
   launchd-visible environment (see

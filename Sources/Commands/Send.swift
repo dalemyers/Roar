@@ -160,12 +160,6 @@ struct Send: AsyncParsableCommand {
 
     @Option(
         name: .long,
-        help: "Per-notification badge count to display alongside the bundle's Dock tile (when one exists) or summary glyph. Must be a non-negative integer."
-    )
-    var badgeCount: Int?
-
-    @Option(
-        name: .long,
         help: "Hint string handed to the target app on click, used to route the click to a specific window or document. Same length and character constraints as --identifier."
     )
     var targetContentID: String?
@@ -203,7 +197,7 @@ struct Send: AsyncParsableCommand {
     @Option(
         name: .long,
         parsing: .singleValue,
-        help: "How the notification should appear if it arrives while roar itself is still running in the foreground (typically only the --wait flow). Repeat the flag for multiple options (--foreground-presentation banner --foreground-presentation list), choosing from: banner, list, sound, badge. To suppress attention-grabbing presentation entirely, use --interruption-level passive — the literal value 'none' is rejected because an invisible-but-clickable notification surface is a phishing vector. When omitted, roar uses banner+list+sound+badge. No effect on notifications delivered after roar has already exited — those go through the system's default presentation."
+        help: "How the notification should appear if it arrives while roar itself is still running in the foreground (typically only the --wait flow). Repeat the flag for multiple options (--foreground-presentation banner --foreground-presentation list), choosing from: banner, list, sound. To suppress attention-grabbing presentation entirely, use --interruption-level passive — the literal value 'none' is rejected because an invisible-but-clickable notification surface is a phishing vector. When omitted, roar uses banner+list+sound. No effect on notifications delivered after roar has already exited — those go through the system's default presentation."
     )
     var foregroundPresentation: [String] = []
 
@@ -319,7 +313,6 @@ struct Send: AsyncParsableCommand {
         let resolvedTitle = title ?? Self.defaultTitle()
         try Self.validateTitle(resolvedTitle)
         try Self.validateSubtitle(subtitle)
-        try Self.validateBadgeCount(badgeCount)
         let resolvedFilterCriteria = try Self.validateFilterCriteria(filterCriteria)
         let resolvedAttachmentTypeHint = try Self.validateAttachmentTypeHint(
             attachmentTypeHint,
@@ -401,8 +394,7 @@ struct Send: AsyncParsableCommand {
         // invocations.
         let silencedUnderProvisional = Self.affordancesDowngradedByProvisional(
             sound: sound,
-            interruptionLevel: interruptionLevel,
-            badgeCount: badgeCount
+            interruptionLevel: interruptionLevel
         )
         if !silencedUnderProvisional.isEmpty {
             let settings = await center.notificationSettings()
@@ -425,7 +417,6 @@ struct Send: AsyncParsableCommand {
         if let resolvedThreadID { content.threadIdentifier = resolvedThreadID }
         if let relevanceScore { content.relevanceScore = relevanceScore }
         if let resolvedTargetContentID { content.targetContentIdentifier = resolvedTargetContentID }
-        if let badgeCount { content.badge = NSNumber(value: badgeCount) }
         if let resolvedFilterCriteria { content.filterCriteria = resolvedFilterCriteria }
 
         // `userInfo` was built and size-checked above the stdin drain;

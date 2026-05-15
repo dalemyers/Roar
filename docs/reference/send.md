@@ -39,7 +39,7 @@ roar send --title "Deploy" --subtitle "production · us-east-1" --body "v3.2.0"
 
 The main message body. If omitted **and** stdin is piped, the
 body is read from stdin (up to a 1 MB cap, per
-[Security](../SECURITY.md#12-stdin-cap)). 4 KB UTF-8 byte cap
+[Security](../SECURITY.md#11-stdin-cap)). 4 KB UTF-8 byte cap
 on the resolved value, whether sourced from the flag or stdin.
 
 ```sh
@@ -96,19 +96,6 @@ that should update rather than accumulate. See
 roar send --identifier build-status --title "Build" --body "30%"
 # ... later, same id:
 roar send --identifier build-status --title "Build" --body "60%"
-```
-
-### `--badge-count <int>`
-
-Per-notification badge number for the Dock tile / summary
-glyph. Non-negative integer. Note: `roar` itself is
-`LSUIElement: true` (no Dock tile), so the badge is only visible
-when the user has another Dock-resident app that handles
-notifications — most useful when combined with
-`--activate-bundle-id` to badge a specific target app.
-
-```sh
-roar send --title "Mail" --body "7 unread" --badge-count 7 --activate-bundle-id com.apple.Mail
 ```
 
 ## Click handlers
@@ -470,10 +457,9 @@ itself is still running in the foreground (typically only the
 | `banner` | Show the banner |
 | `list` | Add to Notification Center |
 | `sound` | Play the configured sound |
-| `badge` | Update the badge |
 
 When the flag is omitted entirely, `roar` uses
-`banner+list+sound+badge`. The literal value `none` is
+`banner+list+sound`. The literal value `none` is
 **rejected** because an invisible-but-clickable notification is
 a phishing vector — use `--interruption-level passive` instead
 to suppress attention-grabbing presentation.

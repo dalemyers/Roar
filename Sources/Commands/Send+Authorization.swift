@@ -76,7 +76,6 @@ extension Send {
     ///   * sound (any `--sound` value, including `default`)
     ///   * banner break-through for time-sensitive interruption
     ///     (`--interruption-level time-sensitive`)
-    ///   * the dock-icon badge update (`--badge-count`)
     ///
     /// `.passive` and `.active` interruption levels are NOT listed:
     /// `.passive` is already quiet by design, and `.active` (the
@@ -91,15 +90,13 @@ extension Send {
     /// constructing a real send.
     static func affordancesDowngradedByProvisional(
         sound: String?,
-        interruptionLevel: InterruptionLevel?,
-        badgeCount: Int?
+        interruptionLevel: InterruptionLevel?
     ) -> [String] {
         var silenced: [String] = []
         if sound != nil { silenced.append("--sound") }
         if interruptionLevel == .timeSensitive {
             silenced.append("--interruption-level time-sensitive")
         }
-        if badgeCount != nil { silenced.append("--badge-count") }
         return silenced
     }
 

@@ -120,7 +120,7 @@ Three different layers of "what is this binary allowed to do,"
 sometimes confused:
 
 - **User notification permission** — granted by the human,
-  per-bundle. Controls banner / sound / badge / time-sensitive
+  per-bundle. Controls banner / sound / time-sensitive
   affordances. `roar settings` shows the current grant.
 - **Entitlements** — claims the binary makes about what
   capabilities it requires (hardened-runtime exceptions,

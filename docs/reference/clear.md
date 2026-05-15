@@ -17,7 +17,7 @@ Bulk-remove notifications by scope. Safer than `dismiss` for
 
 The "delivered-only by default" choice is deliberate: a typo'd
 `roar clear` shouldn't destroy scheduled work — see
-[Security → clear scope default](../SECURITY.md#15-roar-clear-safer-default).
+[Security → clear scope default](../SECURITY.md#14-roar-clear-safer-default).
 
 ```sh
 roar clear                       # delivered only

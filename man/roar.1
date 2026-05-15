@@ -228,11 +228,6 @@ Placeholder shown inside the reply field for
 .BI --text-button-title " LABEL"
 Label of the inline send button next to the reply field.
 .TP
-.BI --badge-count " N"
-Per-notification badge count.
-.B 0
-clears an existing badge. Must be \(>= 0.
-.TP
 .BI --target-content-id " ID"
 Hint string handed to the target app on click, used to route the
 click to a specific window or document.
@@ -270,8 +265,7 @@ flow). Repeat the flag for multiple options
 choosing from
 .BR banner ,
 .BR list ,
-.BR sound ,
-.BR badge .
+.BR sound .
 .TP
 .BI --filter-criteria " STRING"
 Focus-filter hint handed to the framework via

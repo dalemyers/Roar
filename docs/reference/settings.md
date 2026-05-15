@@ -14,7 +14,6 @@ Output keys (rendered in this order):
 | `alert-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |
 | `alert-style` | `none` / `banner` / `alert` / `unknown` |
 | `sound-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |
-| `badge-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |
 | `lock-screen-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |
 | `notification-center-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |
 | `critical-alert-setting` | `enabled` / `disabled` / `not-supported` / `unknown` |

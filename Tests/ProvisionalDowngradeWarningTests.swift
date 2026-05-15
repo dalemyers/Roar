@@ -13,7 +13,7 @@ final class ProvisionalDowngradeWarningTests: XCTestCase {
         // skips the settings round-trip.
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: nil, badgeCount: nil),
+                sound: nil, interruptionLevel: nil),
             []
         )
     }
@@ -21,7 +21,7 @@ final class ProvisionalDowngradeWarningTests: XCTestCase {
     func testSoundAlone() {
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: "default", interruptionLevel: nil, badgeCount: nil),
+                sound: "default", interruptionLevel: nil),
             ["--sound"]
         )
     }
@@ -29,27 +29,8 @@ final class ProvisionalDowngradeWarningTests: XCTestCase {
     func testTimeSensitiveAlone() {
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: .timeSensitive, badgeCount: nil),
+                sound: nil, interruptionLevel: .timeSensitive),
             ["--interruption-level time-sensitive"]
-        )
-    }
-
-    func testBadgeAlone() {
-        XCTAssertEqual(
-            Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: nil, badgeCount: 5),
-            ["--badge-count"]
-        )
-    }
-
-    func testBadgeZeroStillWarns() {
-        // Badge 0 is the documented "clear the dock badge" value —
-        // still meaningful, still downgraded by provisional auth, so
-        // the warning still applies.
-        XCTAssertEqual(
-            Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: nil, badgeCount: 0),
-            ["--badge-count"]
         )
     }
 
@@ -59,25 +40,24 @@ final class ProvisionalDowngradeWarningTests: XCTestCase {
         // affordance, so the helper deliberately ignores them.
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: .passive, badgeCount: nil),
+                sound: nil, interruptionLevel: .passive),
             []
         )
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: nil, interruptionLevel: .active, badgeCount: nil),
+                sound: nil, interruptionLevel: .active),
             []
         )
     }
 
-    func testAllThreeProduceStableOrder() {
+    func testBothProduceStableOrder() {
         // The order in the warning string is `--sound`, then
-        // interruption level, then badge — stable so users grepping
-        // for "warning: --sound" don't have to handle a rearranged
-        // list.
+        // interruption level — stable so users grepping for
+        // "warning: --sound" don't have to handle a rearranged list.
         XCTAssertEqual(
             Send.affordancesDowngradedByProvisional(
-                sound: "Glass", interruptionLevel: .timeSensitive, badgeCount: 1),
-            ["--sound", "--interruption-level time-sensitive", "--badge-count"]
+                sound: "Glass", interruptionLevel: .timeSensitive),
+            ["--sound", "--interruption-level time-sensitive"]
         )
     }
 }

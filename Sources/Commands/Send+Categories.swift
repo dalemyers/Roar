@@ -344,7 +344,7 @@ extension Send {
         // relaunch sees the same delegate). The notification request
         // carries everything that should influence its own display.
         // Stored only when the user explicitly opted in — absence
-        // preserves the historical banner+list+sound+badge default.
+        // preserves the delegate's banner+list+sound default.
         if let resolvedForegroundPresentation {
             userInfo["roar.present.options"] = resolvedForegroundPresentation.serialized
         }

@@ -49,7 +49,6 @@ final class SettingsFormatTests: XCTestCase {
             alertSetting: .enabled,
             alertStyle: .banner,
             soundSetting: .enabled,
-            badgeSetting: .disabled,
             lockScreenSetting: .enabled,
             notificationCenterSetting: .enabled,
             criticalAlertSetting: .notSupported,
@@ -61,21 +60,20 @@ final class SettingsFormatTests: XCTestCase {
         )
         let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
-        // Exactly 13 lines, one per field.
-        XCTAssertEqual(lines.count, 13)
+        // Exactly 12 lines, one per field.
+        XCTAssertEqual(lines.count, 12)
         XCTAssertEqual(lines[0], "authorization-status: authorized")
         XCTAssertEqual(lines[1], "alert-setting: enabled")
         XCTAssertEqual(lines[2], "alert-style: banner")
         XCTAssertEqual(lines[3], "sound-setting: enabled")
-        XCTAssertEqual(lines[4], "badge-setting: disabled")
-        XCTAssertEqual(lines[5], "lock-screen-setting: enabled")
-        XCTAssertEqual(lines[6], "notification-center-setting: enabled")
-        XCTAssertEqual(lines[7], "critical-alert-setting: not-supported")
-        XCTAssertEqual(lines[8], "show-previews-setting: when-authenticated")
-        XCTAssertEqual(lines[9], "time-sensitive-setting: enabled")
-        XCTAssertEqual(lines[10], "scheduled-delivery-setting: disabled")
-        XCTAssertEqual(lines[11], "direct-messages-setting: not-supported")
-        XCTAssertEqual(lines[12], "provides-app-notification-settings: false")
+        XCTAssertEqual(lines[4], "lock-screen-setting: enabled")
+        XCTAssertEqual(lines[5], "notification-center-setting: enabled")
+        XCTAssertEqual(lines[6], "critical-alert-setting: not-supported")
+        XCTAssertEqual(lines[7], "show-previews-setting: when-authenticated")
+        XCTAssertEqual(lines[8], "time-sensitive-setting: enabled")
+        XCTAssertEqual(lines[9], "scheduled-delivery-setting: disabled")
+        XCTAssertEqual(lines[10], "direct-messages-setting: not-supported")
+        XCTAssertEqual(lines[11], "provides-app-notification-settings: false")
     }
 
     func testProvidesAppSettingsTrueRendered() {
@@ -84,7 +82,6 @@ final class SettingsFormatTests: XCTestCase {
             alertSetting: .disabled,
             alertStyle: .none,
             soundSetting: .disabled,
-            badgeSetting: .disabled,
             lockScreenSetting: .disabled,
             notificationCenterSetting: .disabled,
             criticalAlertSetting: .disabled,
@@ -108,7 +105,6 @@ final class SettingsFormatTests: XCTestCase {
             alertSetting: .enabled,
             alertStyle: .banner,
             soundSetting: .enabled,
-            badgeSetting: .enabled,
             lockScreenSetting: .enabled,
             notificationCenterSetting: .enabled,
             criticalAlertSetting: .disabled,

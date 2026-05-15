@@ -124,11 +124,7 @@ The allow-list does real work in three other situations:
    extended set. Without a per-scheme allow-list there'd be
    nothing to pin and nothing to fail-close against.
 
-3. **No "allow everything" flag.** The historical
-   `--allow-any-url-scheme` was removed on review for the reason
-   set-once-and-forget flags always get removed: they invite a
-   one-time decision (during debugging, say) that survives forever
-   in a shell rc or wrapper script. Per-scheme consent ties the
+3. **No "allow everything" flag.** Per-scheme consent ties the
    decision to one specific scheme the user knows they need, in
    the exact `roar send` invocation that needs it.
 
@@ -361,15 +357,7 @@ rejected with explicit floor / ceiling messages. The ceiling is a
 typo guard: `--in 30000d` would otherwise schedule a notification
 for year ~2110 and the user would never see it fire.
 
-### 9. `--badge-count` semantics
-
-Negative values are rejected. Use `--badge-count 0` to clear an
-existing badge. Without this gate, negatives are interpreted by
-the framework as "no change" or silently clamped depending on the
-platform version — both of which surprise users who typed `-1`
-expecting clearing semantics.
-
-### 10. `--foreground-presentation none` rejection
+### 9. `--foreground-presentation none` rejection
 
 The literal value `none` is rejected on both ends:
 
@@ -378,14 +366,14 @@ The literal value `none` is rejected on both ends:
   suppress break-through).
 - **Click side:** the delegate's deserialiser refuses to honour a
   literal `"none"` from userInfo and falls through to the framework
-  default (banner+list+sound+badge).
+  default (banner+list+sound).
 
 The asymmetry is intentional. An empty presentation set produces a
 notification that's visually invisible but still click-actionable —
 the worst kind of foothold for a same-bundle-id spoofer. The click
 target must always be visible to the user.
 
-### 11. `userInfo` size cap
+### 10. `userInfo` size cap
 
 The userInfo dict is property-list-serialised before being attached
 to the request and the binary plist size is capped at 16 KB.
@@ -394,7 +382,7 @@ Oversize requests fail inside `add(_:)` with an opaque
 rejection. The cap is well over any realistic Roar payload but
 trips on pathological inputs.
 
-### 12. stdin cap
+### 11. stdin cap
 
 When `--body` is omitted and stdin is piped, the read is capped
 at 1 MB. A runaway pipe (`yes | roar send`) overflows the cap
@@ -405,7 +393,7 @@ the CLI doesn't block forever on a paused producer.) Without
 the cap, a single misbehaving process could pull arbitrary
 memory into Roar's address space.
 
-### 13. Identifier length cap
+### 12. Identifier length cap
 
 `UNNotificationRequest.identifier` has a system-defined upper bound
 that the framework documents as "system defined." Empirical
@@ -415,17 +403,16 @@ diagnostic is clean. The same cap applies to `--target-content-id`,
 `--thread-id`, and `--filter-criteria` (all share the XPC string
 field's C-bridge truncation hazard).
 
-### 14. Provisional-auth warning
+### 13. Provisional-auth warning
 
 Provisional notifications post quietly — no banner, no sound, no
-badge break-through, no time-sensitive bypass. If you set any of
-`--sound`, `--interruption-level time-sensitive`, or
-`--badge-count` and the current auth status is provisional, Roar
-writes a one-time stderr warning explaining that those affordances
-are being silently downgraded and points the user at how to
-promote.
+time-sensitive bypass. If you set `--sound`
+or `--interruption-level time-sensitive` and the current auth
+status is provisional, Roar writes a one-time stderr warning
+explaining that those affordances are being silently downgraded
+and points the user at how to promote.
 
-### 15. `roar clear` safer default
+### 14. `roar clear` safer default
 
 Bare `roar clear` clears only *delivered* notifications. Scheduled
 (`--in` / `--at`) requests are preserved. A user typing
@@ -441,7 +428,7 @@ roar clear --all
 The flags `--delivered`, `--pending`, `--all` are mutually
 exclusive — pick one (or none for the safe default).
 
-### 16. `roar dismiss` non-zero on no-match
+### 15. `roar dismiss` non-zero on no-match
 
 UN's `removeDeliveredNotifications(withIdentifiers:)` silently
 no-ops on unknown ids. Roar snapshots delivered + pending ids
@@ -454,7 +441,7 @@ no-ops on unknown ids. Roar snapshots delivered + pending ids
 A typo'd `roar dismiss` no longer returns 0 with the user believing
 their notification was removed.
 
-### 17. Click-time XPC drain
+### 16. Click-time XPC drain
 
 `exit()` after a click can race the XPC ack flush. Roar drains for
 `RoarAppDelegate.exitDrainDelay` (100 ms) before terminating in
@@ -463,7 +450,7 @@ both the click-response path and the bulk remove paths
 sometimes logs "abandoned response" entries when the process exits
 too quickly.
 
-### 18. Reserved action ids
+### 17. Reserved action ids
 
 `default` and `dismiss` are rejected at parse time so custom
 actions can't collide with the `--wait` stdout protocol's
