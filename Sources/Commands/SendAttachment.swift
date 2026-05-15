@@ -311,7 +311,55 @@ extension Send {
             // `AttachmentError` because we're past the
             // ArgumentParser validation phase.
             let canonical = try Self.rejectIfUnsafeForAttachment(path: path)
-            resolvedURL = URL(filePath: canonical)
+
+            // Copy to a temp file before handing to UN.
+            //
+            // `UNNotificationAttachment.init(identifier:url:options:)`
+            // on macOS *moves* the source file into the system's
+            // attachment store at `add(_:)` time — different from
+            // iOS, where it copies. Without this temp-copy step the
+            // user's original file disappears the moment the
+            // notification is posted, which is a surprising and
+            // destructive behaviour the user almost never wants.
+            //
+            // We copy from `canonical` (the realpath-resolved, post-
+            // symlink-walk path) rather than from the user's typed
+            // path so the attachment content matches what the
+            // security pass verified. The temp filename preserves
+            // the original basename — UN uses the filename's
+            // extension as a fallback for UTI inference when
+            // `--attachment-type-hint` isn't set.
+            //
+            // Cleanup: we deliberately don't `unlink` the temp
+            // file. If UN moves it (the common case), the temp is
+            // gone. If UN copies it (varies by macOS version), the
+            // temp lives briefly in NSTemporaryDirectory() and is
+            // reaped by macOS's periodic /tmp sweep. The `roar`
+            // process exits within ~100 ms of `add(_:)` anyway, so
+            // long-lived temp accumulation isn't a concern.
+            let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent(
+                    "io.myers.roar.attachment-\(UUID().uuidString)",
+                    isDirectory: true
+                )
+            do {
+                try FileManager.default.createDirectory(
+                    at: tempDir, withIntermediateDirectories: true)
+                let filename = (canonical as NSString).lastPathComponent
+                let tempFile = tempDir.appendingPathComponent(filename)
+                try FileManager.default.copyItem(
+                    atPath: canonical, toPath: tempFile.path)
+                resolvedURL = tempFile
+            } catch {
+                // Translate the copy failure into the same error
+                // family as the other attachment-staging failures
+                // so the caller's diagnostic shape stays uniform.
+                throw AttachmentError.unsafeLocalAttachment(
+                    path: canonical,
+                    reason: .missing(errno: (error as NSError).code == NSFileWriteOutOfSpaceError
+                        ? Int32(ENOSPC) : Int32((error as NSError).code))
+                )
+            }
 
         case .rejectedRemoteURL(let scheme):
             // Validation should have caught this. If it didn't, throw
