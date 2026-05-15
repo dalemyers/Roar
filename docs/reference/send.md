@@ -626,3 +626,73 @@ in their Focus filter rules.
 ```sh
 roar send --title "PR review" --body "Tap to open" --filter-criteria work
 ```
+
+## JSON output (`--json`)
+
+Pass `--json` to emit a JSON object on stdout instead of text /
+silence. Two shapes, depending on whether `--wait` is in play.
+
+### Non-wait
+
+The text path is silent on success. With `--json`, `roar send`
+prints a single object confirming the post:
+
+```json
+{"identifier": "abc-123", "posted": true}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `identifier` | string | The value you passed via `--identifier`, or the UUID Roar minted if you didn't. Useful for downstream `roar dismiss "$id"` or replace-in-place reposts. |
+| `posted` | boolean | Always `true` on success — failures throw and exit non-zero, the JSON shape never carries `"posted": false`. |
+
+```sh
+# Capture the minted identifier for a follow-up dismiss
+id=$(roar send --title "Build…" --body "running" --json | jq -r .identifier)
+# later:
+roar dismiss "$id"
+```
+
+### `--wait`
+
+A single JSON object representing the terminal outcome. Replaces
+the line-oriented text protocol (`<action>\n` or
+`<action>\n<text>\n`).
+
+```json
+{"action": "default", "outcome": "click", "text": null}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `outcome` | `"click"` \| `"dismiss"` \| `"timeout"` | Coarse-grained verdict. Most scripts that previously switched on the text protocol's four shapes can `case` on this alone. |
+| `action` | string | The action identifier. Reserved sentinels: `default` (body click), `dismiss` (explicit dismiss), `timeout` (timeout fired). Custom `--action` ids pass through verbatim. |
+| `text` | string \| `null` | Typed text for a `--text-action` submission; `null` for every other outcome. JSON string-escaping handles embedded newlines and arbitrary bytes — the text protocol's "read to EOF" workaround isn't needed. |
+
+Exit codes are unchanged across output modes:
+`waitDismissExitCode` (3), `waitTimeoutExitCode` (2), 0 on
+matched click. Scripts using `$?` work identically; scripts
+using `jq -r '.outcome'` get a single token to switch on.
+
+The schema is stable scripting ABI — fields may be added, but
+renames or removals are major-version breaks. `text` always
+appears as either a string or `null`, never omitted, so
+`jq '.text'` always returns a value.
+
+```sh
+# Switch on the coarse outcome
+r=$(roar send --title "Deploy?" --action go:Go --action stop:Stop \
+        --wait --wait-timeout 30s --json)
+case "$(jq -r '.outcome' <<<"$r")" in
+    click)
+        action=$(jq -r '.action' <<<"$r")
+        echo "user picked $action"
+        ;;
+    dismiss) echo "user said no" ;;
+    timeout) echo "no answer in 30s" ;;
+esac
+
+# Pull the typed text out of a --text-action reply
+reply=$(roar send --title "Note?" --text-action note:Add --wait --json)
+note=$(jq -r '.text' <<<"$reply")
+```

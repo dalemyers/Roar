@@ -24,3 +24,32 @@ of every other id still happens.
 roar dismiss build-status
 roar dismiss build-status deploy-status   # multiple
 ```
+
+## JSON output (`--json`)
+
+Pass `--json` to emit a JSON summary on stdout instead of the
+text path's silent-stdout / warnings-on-stderr shape.
+
+```json
+{
+  "requested": ["build-status", "deploy-status", "build-status"],
+  "unknown": ["deploy-status"]
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `requested` | array of strings | The argv as the user typed it, in order, **including duplicates**. |
+| `unknown` | array of strings | Deduplicated subset that didn't match any delivered or pending notification. Same data the text path emits to stderr. |
+
+Exit codes are unchanged: 0 if at least one distinct identifier
+matched, `noMatchExitCode` (4) if none did, 64 on usage errors.
+JSON-mode invocations don't emit anything on stderr — the
+`unknown` array IS the diagnostic.
+
+```sh
+# How many of my requested ids actually existed?
+total=$(roar dismiss --json a b c | jq '.requested | length')
+unknown=$(roar dismiss --json a b c | jq '.unknown | length')
+echo "$((total - unknown)) dismissed, $unknown unknown"
+```

@@ -19,14 +19,86 @@ struct Settings: AsyncParsableCommand {
         abstract: "Print the system's UNNotificationSettings for this bundle."
     )
 
+    @OptionGroup var output: OutputOptions
+
     /// Fetch the current `UNNotificationSettings` and print the
     /// formatted view to stdout.
     func run() async throws {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
-        let output = Self.format(settings: settings)
-        print(output)
+        if output.json {
+            print(Self.formatJSON(settings: settings))
+        } else {
+            print(Self.format(settings: settings))
+        }
         await CommandExit.perform(CommandExit.Plan(drain: .zero, code: 0))
+    }
+
+    /// JSON shape for `roar settings --json`. Field names match
+    /// the dashed text format's keys exactly so a reader can
+    /// mechanically map between the two representations.
+    ///
+    /// `CodingKeys` with explicit string raw values pins the JSON
+    /// key spelling at the Swift type level — a rename of a
+    /// Swift property doesn't silently shift the wire format.
+    struct JSONShape: Encodable, Equatable {
+        let authorizationStatus: String
+        let alertSetting: String
+        let alertStyle: String
+        let soundSetting: String
+        let lockScreenSetting: String
+        let notificationCenterSetting: String
+        let criticalAlertSetting: String
+        let showPreviewsSetting: String
+        let timeSensitiveSetting: String
+        let scheduledDeliverySetting: String
+        let directMessagesSetting: String
+        let providesAppNotificationSettings: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case authorizationStatus = "authorization-status"
+            case alertSetting = "alert-setting"
+            case alertStyle = "alert-style"
+            case soundSetting = "sound-setting"
+            case lockScreenSetting = "lock-screen-setting"
+            case notificationCenterSetting = "notification-center-setting"
+            case criticalAlertSetting = "critical-alert-setting"
+            case showPreviewsSetting = "show-previews-setting"
+            case timeSensitiveSetting = "time-sensitive-setting"
+            case scheduledDeliverySetting = "scheduled-delivery-setting"
+            case directMessagesSetting = "direct-messages-setting"
+            case providesAppNotificationSettings = "provides-app-notification-settings"
+        }
+    }
+
+    /// Produce the `--json` rendering of `UNNotificationSettings`.
+    /// Mirrors `format(settings:)` but emits a JSON object instead
+    /// of `key: value` lines. The values use the same kebab-case
+    /// tokens (`enabled` / `disabled` / `not-supported`, etc.) so
+    /// downstream consumers don't need a translation table between
+    /// the two output modes.
+    static func formatJSON(settings: UNNotificationSettings) -> String {
+        let directMessages: UNNotificationSetting
+        if #available(macOS 14.0, *) {
+            directMessages = settings.directMessagesSetting
+        } else {
+            directMessages = .notSupported
+        }
+        let shape = JSONShape(
+            authorizationStatus: format(status: settings.authorizationStatus),
+            alertSetting: format(setting: settings.alertSetting),
+            alertStyle: format(style: settings.alertStyle),
+            soundSetting: format(setting: settings.soundSetting),
+            lockScreenSetting: format(setting: settings.lockScreenSetting),
+            notificationCenterSetting: format(setting: settings.notificationCenterSetting),
+            criticalAlertSetting: format(setting: settings.criticalAlertSetting),
+            showPreviewsSetting: format(previews: settings.showPreviewsSetting),
+            timeSensitiveSetting: format(setting: settings.timeSensitiveSetting),
+            scheduledDeliverySetting: format(setting: settings.scheduledDeliverySetting),
+            directMessagesSetting: format(setting: directMessages),
+            providesAppNotificationSettings: settings.providesAppNotificationSettings
+        )
+        return encodeJSON(shape)
     }
 
     /// Render a `UNNotificationSettings` as the stable `key: value`

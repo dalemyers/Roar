@@ -33,3 +33,42 @@ it off; `enabled` means it's on.
 roar settings
 roar settings | grep '^authorization-status'
 ```
+
+## JSON output (`--json`)
+
+Pass `--json` to emit a JSON object instead of `key: value` lines.
+Keys match the text format's spelling exactly (dashed, not
+camelCased) so consumers can mechanically map between the two
+representations.
+
+```json
+{
+  "authorization-status": "authorized",
+  "alert-setting": "enabled",
+  "alert-style": "banner",
+  "sound-setting": "enabled",
+  "lock-screen-setting": "enabled",
+  "notification-center-setting": "enabled",
+  "critical-alert-setting": "not-supported",
+  "show-previews-setting": "always",
+  "time-sensitive-setting": "enabled",
+  "scheduled-delivery-setting": "disabled",
+  "direct-messages-setting": "not-supported",
+  "provides-app-notification-settings": false
+}
+```
+
+Every key in the table above appears in the JSON output. Values
+use the same token vocabulary (`enabled` / `disabled` /
+`not-supported` / etc.); the only value-shape difference from
+the text format is `provides-app-notification-settings`, which
+is a real JSON boolean rather than the literal string `true` /
+`false`.
+
+```sh
+# Is Roar authorized at all?
+roar settings --json | jq -r '."authorization-status"'
+
+# Are time-sensitive notifications enabled?
+roar settings --json | jq -r '."time-sensitive-setting"'
+```

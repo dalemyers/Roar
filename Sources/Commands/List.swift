@@ -36,6 +36,40 @@ struct List: AsyncParsableCommand {
     )
     var header: Bool = false
 
+    @OptionGroup var output: OutputOptions
+
+    /// JSON shape for a single notification entry. Field names match
+    /// the TSV column meaning so a reader can mechanically translate
+    /// between the two formats. `when` is `null` only for triggers
+    /// the framework can't resolve to a next-fire date (rare —
+    /// usually means the trigger was removed mid-enumeration).
+    ///
+    /// Custom `encode(to:)` rather than the synthesised default
+    /// because `JSONEncoder` omits `Optional.nil` fields by default,
+    /// and the JSON ABI is "every field appears in every entry, even
+    /// if the value is `null`". Consumers using `jq` or a schema
+    /// validator can rely on `.when` always being present.
+    struct JSONEntry: Encodable, Equatable {
+        let bucket: String       // "delivered" or "pending"
+        let when: String?        // ISO 8601 UTC, or nil if unresolved
+        let identifier: String
+        let title: String
+        let body: String
+
+        enum CodingKeys: String, CodingKey {
+            case bucket, when, identifier, title, body
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(bucket, forKey: .bucket)
+            try c.encode(when, forKey: .when)       // emits null on nil
+            try c.encode(identifier, forKey: .identifier)
+            try c.encode(title, forKey: .title)
+            try c.encode(body, forKey: .body)
+        }
+    }
+
     /// Print the matching notifications and exit. Authorization is
     /// *not* required to enumerate — UN returns whatever this app has
     /// already produced regardless of current auth state.
@@ -47,23 +81,25 @@ struct List: AsyncParsableCommand {
         }
         let center = UNUserNotificationCenter.current()
 
-        if header {
-            print("ID\tSTATUS\tTIME\tTITLE\tBODY")
-        }
-
+        var deliveredList: [UNNotification] = []
+        var pendingList: [UNNotificationRequest] = []
         if !pending {
-            // Default + --delivered case.
-            let deliveredList = await center.deliveredNotifications()
-            for n in deliveredList {
-                print(Self.formatDelivered(n))
-            }
+            deliveredList = await center.deliveredNotifications()
         }
         if !delivered {
-            // Default + --pending case.
-            let pendingList = await center.pendingNotificationRequests()
-            for r in pendingList {
-                print(Self.formatPending(r))
+            pendingList = await center.pendingNotificationRequests()
+        }
+
+        if output.json {
+            let entries = deliveredList.map(Self.jsonEntry(forDelivered:))
+                + pendingList.map(Self.jsonEntry(forPending:))
+            print(encodeJSON(entries))
+        } else {
+            if header {
+                print("ID\tSTATUS\tTIME\tTITLE\tBODY")
             }
+            for n in deliveredList { print(Self.formatDelivered(n)) }
+            for r in pendingList { print(Self.formatPending(r)) }
         }
         // Route through the shared exit chokepoint instead of a
         // direct `Darwin.exit(0)`. `roar list` is a read-only path
@@ -73,6 +109,47 @@ struct List: AsyncParsableCommand {
         // before exit will go through `CommandExit.hook` like every
         // other terminal path.
         await CommandExit.perform(CommandExit.Plan(drain: .zero, code: 0))
+    }
+
+    /// JSON equivalent of `formatDelivered`. Title and body are
+    /// emitted verbatim — the TSV path scrubs control characters
+    /// via `flatten` to keep each row on one line, but JSON strings
+    /// are quoted and can carry newlines safely, so flattening
+    /// would discard signal a reader can use.
+    static func jsonEntry(forDelivered notification: UNNotification) -> JSONEntry {
+        let content = notification.request.content
+        return JSONEntry(
+            bucket: "delivered",
+            when: Self.isoDate(notification.date),
+            identifier: notification.request.identifier,
+            title: content.title,
+            body: content.body
+        )
+    }
+
+    /// JSON equivalent of `formatPending`. `when` is `nil` when the
+    /// trigger can't resolve a next-fire date (which the TSV path
+    /// renders as `"(unscheduled)"`); `nil` is cleaner for JSON
+    /// consumers that want a sentinel-vs-value branch.
+    static func jsonEntry(forPending request: UNNotificationRequest) -> JSONEntry {
+        let when: String?
+        if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger,
+           let next = trigger.nextTriggerDate() {
+            when = Self.isoDate(next)
+        } else if let trigger = request.trigger as? UNCalendarNotificationTrigger,
+                  let next = trigger.nextTriggerDate() {
+            when = Self.isoDate(next)
+        } else {
+            when = nil
+        }
+        let content = request.content
+        return JSONEntry(
+            bucket: "pending",
+            when: when,
+            identifier: request.identifier,
+            title: content.title,
+            body: content.body
+        )
     }
 
     /// Render a `UNNotification` (already-delivered) as a tab-separated

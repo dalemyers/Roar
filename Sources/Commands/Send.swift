@@ -219,6 +219,18 @@ struct Send: AsyncParsableCommand {
     )
     var waitTimeout: String?
 
+    @OptionGroup var output: OutputOptions
+
+    /// JSON shape for `roar send --json` on the non-wait happy path.
+    /// `identifier` is what the user passed via `--identifier`, or the
+    /// UUID we minted if they didn't — useful for the caller to
+    /// follow up with `roar dismiss <identifier>` or
+    /// `--identifier <identifier>` on a replace-in-place repost.
+    struct JSONPostedShape: Encodable, Equatable {
+        let identifier: String
+        let posted: Bool
+    }
+
     /// User-facing names for `UNNotificationInterruptionLevel`. `.critical`
     /// is intentionally absent: it requires Apple-granted entitlement and
     /// has no legitimate use case for an ad-hoc-signed CLI tool.
@@ -584,8 +596,17 @@ struct Send: AsyncParsableCommand {
                     userText: Self.textInputResponseText(from: $0)
                 )
             }
-            await Self.exitFromWait(primitives: primitives)
+            await Self.exitFromWait(primitives: primitives, json: output.json)
             return
+        }
+        if output.json {
+            // Non-wait happy path: confirm the post on stdout so a
+            // caller can `jq` for the minted identifier on its way to
+            // a follow-up `roar dismiss <id>`.
+            print(encodeJSON(JSONPostedShape(
+                identifier: requestIdentifier,
+                posted: true
+            )))
         }
         await Self.performExit(ExitPlan(drain: .zero, code: 0))
     }

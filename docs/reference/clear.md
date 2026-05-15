@@ -25,3 +25,33 @@ roar clear --all                 # both buckets
 roar clear --all --categories    # both buckets + prune unreferenced categories
 roar clear --categories          # just the prune, leave notifications alone
 ```
+
+## JSON output (`--json`)
+
+Pass `--json` to emit a JSON summary of which scopes the
+invocation cleared. The text path is silent; the JSON path gives
+a downstream observer a structured confirmation.
+
+```json
+{
+  "delivered_cleared": true,
+  "pending_cleared": false,
+  "categories_pruned": false
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `delivered_cleared` | boolean | `true` when the invocation cleared the delivered bucket (default, or `--delivered`, or `--all`). |
+| `pending_cleared` | boolean | `true` when the invocation cleared the pending bucket (`--pending` or `--all`). |
+| `categories_pruned` | boolean | `true` when `--categories` was passed. |
+
+The booleans are scope-flags, not counts — UN's `removeAll*`
+APIs are fire-and-forget and don't surface a "removed N
+notifications" number. If you need a count, snapshot
+`roar list --json | jq 'length'` before and after.
+
+```sh
+# Confirm a scheduled-only clear didn't touch delivered
+roar clear --pending --json | jq -e '.pending_cleared and (.delivered_cleared | not)'
+```

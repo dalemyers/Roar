@@ -40,6 +40,18 @@ struct Dismiss: AsyncParsableCommand {
     /// same silent success every time.
     static let noMatchExitCode: Int32 = 4
 
+    @OptionGroup var output: OutputOptions
+
+    /// JSON shape for `roar dismiss --json`. `requested` is the
+    /// user's argv (preserved order, including duplicates). `unknown`
+    /// is the deduplicated subset that didn't match any delivered
+    /// or pending notification — same data the text path emits to
+    /// stderr, only here it's structured for downstream consumers.
+    struct JSONShape: Encodable, Equatable {
+        let requested: [String]
+        let unknown: [String]
+    }
+
     /// Alias / forwarding accessor for the centralised
     /// `CommandExit` chokepoint. See `Sources/CommandExit.swift`.
     typealias ExitPlan = CommandExit.Plan
@@ -72,7 +84,14 @@ struct Dismiss: AsyncParsableCommand {
         try Self.validateIdentifiers(identifiers)
         let unknownIDs = try await runOrchestration(
             center: UNUserNotificationCenter.current())
-        Self.reportUnknownIdentifiers(unknownIDs)
+        if output.json {
+            print(encodeJSON(JSONShape(
+                requested: identifiers,
+                unknown: unknownIDs
+            )))
+        } else {
+            Self.reportUnknownIdentifiers(unknownIDs)
+        }
         let exitCode = Self.exitCode(
             unknownIDs: unknownIDs, requested: identifiers)
         // Same XPC drain rationale as the click-response handler;

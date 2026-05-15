@@ -102,11 +102,28 @@ struct Clear: AsyncParsableCommand {
     /// `Send.categoryIdentifier` cannot drift.
     static let dynamicCategoryPrefix = "roar.dyn."
 
+    @OptionGroup var output: OutputOptions
+
+    /// JSON shape for `roar clear --json`. Reports which buckets the
+    /// invocation cleared (so a downstream observer can confirm
+    /// `clear --pending` did not touch `delivered`, etc.) and whether
+    /// the category prune ran. Boolean fields rather than counts
+    /// because UN's `removeAll*` APIs are fire-and-forget — there's
+    /// no return value the caller can use to report a precise count.
+    struct JSONShape: Encodable, Equatable {
+        let deliveredCleared: Bool
+        let pendingCleared: Bool
+        let categoriesPruned: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case deliveredCleared = "delivered_cleared"
+            case pendingCleared = "pending_cleared"
+            case categoriesPruned = "categories_pruned"
+        }
+    }
+
     /// Alias / forwarding accessor for the centralised
-    /// `CommandExit` chokepoint. The per-command duplication was
-    /// removed on review: all three commands (`send`, `clear`,
-    /// `dismiss`) and the `Send.ensureAuthorized` denial path now
-    /// route through one `CommandExit.perform`. See
+    /// `CommandExit` chokepoint. See
     /// `Sources/CommandExit.swift` for the full rationale.
     typealias ExitPlan = CommandExit.Plan
 
@@ -128,6 +145,20 @@ struct Clear: AsyncParsableCommand {
     /// `RoarAppDelegate.exitDrainDelay`.
     func run() async throws {
         try await runOrchestration(center: UNUserNotificationCenter.current())
+        if output.json {
+            // Compute the same flags `runOrchestration` used so the
+            // JSON output reflects exactly what was performed. The
+            // logic mirrors the orchestrator's branching exactly —
+            // a regression there would surface here too.
+            let onlyCategories = categories && !delivered && !pending && !all
+            let didDelivered = !onlyCategories && !pending
+            let didPending = !onlyCategories && (pending || all)
+            print(encodeJSON(JSONShape(
+                deliveredCleared: didDelivered,
+                pendingCleared: didPending,
+                categoriesPruned: categories
+            )))
+        }
         // Same XPC drain rationale as the click-response handler;
         // share the constant rather than re-hardcoding the duration.
         // See `RoarAppDelegate.exitDrainDelay` for the full reasoning.

@@ -38,3 +38,52 @@ To act on identifiers, pipe to `awk` or `cut`. The ID is column 1:
 ```sh
 roar list --delivered | awk -F'\t' '{print $1}' | xargs roar dismiss
 ```
+
+## JSON output (`--json`)
+
+Pass `--json` to emit a JSON array instead of TSV. One object per
+notification:
+
+```json
+[
+  {
+    "bucket": "delivered",
+    "when": "2026-05-15T13:00:00Z",
+    "identifier": "build-status",
+    "title": "Build complete",
+    "body": "All green"
+  },
+  {
+    "bucket": "pending",
+    "when": null,
+    "identifier": "weekly-standup",
+    "title": "Standup",
+    "body": "9am Mondays"
+  }
+]
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `bucket` | `"delivered"` \| `"pending"` | Mirrors the TSV `STATUS` column. |
+| `when` | `string` (ISO 8601 UTC) \| `null` | Delivery time for delivered, next-fire date for pending. `null` replaces the TSV `(unscheduled)` sentinel when the framework can't resolve a next-fire date. |
+| `identifier` | `string` | The `UNNotificationRequest.identifier`. |
+| `title` | `string` | Notification title, emitted verbatim. Newlines and control characters survive (JSON string escaping handles them); no `flatten()` is applied. |
+| `body` | `string` | Notification body, same verbatim treatment. |
+
+The schema is stable scripting ABI — fields may be added, but
+renames or removals are major-version breaks. `null` always
+appears explicitly for unresolved `when` rather than being
+omitted, so `jq '.when'` returns a value (string or null) every
+time.
+
+```sh
+# All delivered titles
+roar list --delivered --json | jq -r '.[].title'
+
+# Identifiers of every pending notification
+roar list --pending --json | jq -r '.[].identifier'
+```
+
+`--header` is ignored under `--json` — JSON object keys are
+self-describing.

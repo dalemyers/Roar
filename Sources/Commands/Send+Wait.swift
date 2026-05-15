@@ -35,20 +35,88 @@ extension Send {
     ///
     /// `nonisolated static` so the test seam doesn't pull
     /// `MainActor` isolation across the call.
-    static func exitFromWait(primitives: WaitExitPrimitives?) async {
+    ///
+    /// - Parameters:
+    ///   - primitives: The matched response's action + user-text,
+    ///     or `nil` on the timeout path.
+    ///   - json: When true, emit the JSON shape (`WaitJSONShape`)
+    ///     instead of the text protocol. Exit code is unchanged —
+    ///     0 / 2 / 3 still distinguish click vs timeout vs
+    ///     dismiss, so scripts that branch on `$?` work
+    ///     identically across formats.
+    static func exitFromWait(primitives: WaitExitPrimitives?, json: Bool = false) async {
         if let primitives {
             let outcome = Self.formatWaitResponse(
                 actionIdentifier: primitives.actionIdentifier,
                 userText: primitives.userText
             )
-            print(outcome.output, terminator: "")
+            if json {
+                print(encodeJSON(WaitJSONShape(
+                    outcome: outcome.exitCode == waitDismissExitCode ? "dismiss" : "click",
+                    action: primitives.actionIdentifier,
+                    text: primitives.userText
+                )))
+            } else {
+                print(outcome.output, terminator: "")
+            }
             await Self.performExit(
                 ExitPlan(drain: outcome.drain, code: outcome.exitCode))
             return
         }
-        print(Self.waitTimeoutSentinel)
+        if json {
+            print(encodeJSON(WaitJSONShape(
+                outcome: "timeout",
+                action: waitTimeoutSentinel,
+                text: nil
+            )))
+        } else {
+            print(Self.waitTimeoutSentinel)
+        }
         await Self.performExit(
             ExitPlan(drain: .zero, code: Self.waitTimeoutExitCode))
+    }
+
+    /// JSON shape for `roar send --wait --json`. Three fields:
+    ///
+    ///   - `outcome`: one of `click` / `dismiss` / `timeout`. The
+    ///     coarse-grained verdict — most scripts that wanted a
+    ///     `case` over the four text-protocol shapes can switch
+    ///     on this alone.
+    ///   - `action`: the action identifier (`default`, the user's
+    ///     `--action <id>:<title>` id, or `dismiss` / `timeout` for
+    ///     those outcomes). Same sentinel vocabulary as the text
+    ///     protocol so a translation table isn't needed.
+    ///   - `text`: the `--text-action` typed text, or `null` for
+    ///     non-text-action outcomes. JSON string-escaping means
+    ///     embedded newlines / control bytes survive cleanly;
+    ///     the text protocol relied on "read to EOF" semantics
+    ///     for the same.
+    ///
+    /// Exit codes are unchanged across output modes
+    /// (`waitDismissExitCode` = 3, `waitTimeoutExitCode` = 2,
+    /// success = 0). Scripts using `$?` work identically; scripts
+    /// using `jq -r '.outcome'` get a single token to switch on.
+    struct WaitJSONShape: Encodable, Equatable {
+        let outcome: String
+        let action: String
+        let text: String?
+
+        enum CodingKeys: String, CodingKey {
+            case outcome, action, text
+        }
+
+        // Custom encode to emit `"text": null` rather than omit
+        // the key when text is nil. The ABI is "every field
+        // appears in every emission" so a `jq '.text'` always
+        // returns a value (null vs string), letting consumers
+        // distinguish "click had no text" from "key spelling
+        // changed".
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(outcome, forKey: .outcome)
+            try c.encode(action, forKey: .action)
+            try c.encode(text, forKey: .text)
+        }
     }
 
     /// Terminal output, post-print drain duration, and exit code for
