@@ -1,10 +1,12 @@
 # Troubleshooting
 
-If `roar send` exits cleanly but you don't see a notification — or
-the click handler "does nothing," or the schedule never fires — the
-fix is almost always at the OS layer (System Settings, Focus rules,
-provisional auth), not in Roar. This guide walks through the
-common symptoms.
+Common symptoms and how to fix them. Each section names a
+specific observable problem (`roar send` exits cleanly but no
+notification; click handler does nothing; schedule never fires)
+and walks through the diagnostics. In most cases the fix is at
+the OS layer — System Settings, Focus rules, provisional auth
+state — but the diagnostic commands here will point you at
+whether the problem is in Roar or in the OS configuration.
 
 ## "I ran `roar send` and nothing happened"
 
@@ -47,22 +49,16 @@ Re-enable it:
 Roar exits with code `1` and prints to stderr in this state, so
 scripts can branch on it.
 
-## "I get `authorization-status: notDetermined` every run"
+## "I get `authorization-status: not-determined` every run"
 
 Roar requests authorization on every cold start. If you keep seeing
-`notDetermined`, the request is failing — usually because the
-bundle id isn't registered with LaunchServices:
+`not-determined`, the request is failing — usually because the
+bundle id isn't registered with LaunchServices. `lsregister` lives
+inside the CoreServices framework, so use the full path or alias
+it onto your `PATH`:
 
 ```sh
-lsregister -f /Applications/roar.app
-```
-
-`lsregister` lives in
-`/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister`,
-so add it to your `PATH` or use the full path:
-
-```sh
-/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f /Applications/roar.app
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f /Applications/Roar.app
 ```
 
 If Roar is run from somewhere other than `/Applications`, every
@@ -111,8 +107,13 @@ Without that, `time-sensitive` gets demoted to active and respects
 the Focus mute rules like any normal notification.
 
 The `.critical` level is gated behind an Apple-granted entitlement
-(`com.apple.developer.usernotifications.time-sensitive`); an ad-hoc-
-signed CLI cannot claim it. There's no flag for it.
+(`com.apple.developer.usernotifications.critical-alerts`); an
+ad-hoc-signed CLI cannot claim it. There's no flag for it.
+(The similarly-named `com.apple.developer.usernotifications.time-sensitive`
+entitlement gates time-sensitive interruptions; `--interruption-level
+time-sensitive` works without it, because macOS lets unentitled
+apps request the level — it just defers to the user's Focus
+configuration for the actual break-through.)
 
 ## "My badge doesn't update"
 
@@ -246,6 +247,99 @@ Two common causes:
   at NUL, so a command containing `\0` would silently change. Roar
   rejects up front.
 
+## "`--exec` ran but my script didn't seem to do anything"
+
+The exec command runs in a fresh, scrubbed environment, not in
+your interactive shell. Common causes of "ran silently but did
+nothing":
+
+- **`PATH` is pinned** to the system default
+  (`/usr/bin:/bin:/usr/sbin:/sbin`). Tools installed in
+  `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`
+  are NOT on it. Use absolute paths or set `PATH` inside the
+  command:
+  ```sh
+  roar send --body "Click" --allow-shell-on-click \
+    --exec 'PATH=/opt/homebrew/bin:$PATH brew outdated'
+  ```
+- **Working directory is `$HOME`**, not your project. Use
+  `cd` inside the command:
+  ```sh
+  --exec 'cd ~/code && make'
+  ```
+- **Most env vars are stripped.** `BASH_ENV`, `IFS`, `LD_*`,
+  `DYLD_*`, `SHELLOPTS`, and any value containing `=` or NUL
+  are filtered. If your command depends on a non-standard
+  variable, set it inside the command.
+- **The command runs but stdout / stderr are discarded.** The
+  click handler is a launchd-style relaunch with no terminal;
+  output goes nowhere by default. To see what your command
+  produces, redirect to a file:
+  ```sh
+  --exec 'cd ~/code && make > /tmp/roar-exec.log 2>&1'
+  ```
+  Then `tail /tmp/roar-exec.log` after clicking.
+- **`ROAR_DEBUG=1`** at SEND time embeds nothing useful — the
+  variable is read at CLICK time, by the click-handler
+  process. The click handler is spawned by launchd (`open -na`
+  style), which does **not** inherit your interactive shell's
+  environment, so a one-shot `ROAR_DEBUG=1 roar send ...`
+  invocation only affects the send-side. To see exec-time
+  diagnostics, export `ROAR_DEBUG=1` into the launchd-visible
+  environment via `launchctl setenv ROAR_DEBUG 1` (effective
+  for the rest of the login session), then click the banner
+  and read the result with `log show --predicate 'process ==
+  "roar"' --last 5m`. Clear it again with `launchctl unsetenv
+  ROAR_DEBUG` when you're done.
+
+Exit code 1 from the parent `roar send` means the click
+handler signaled a failure (auth denied, URL open refused,
+exec returned non-zero). The command itself reaching code 1
+is propagated.
+
+## "`--activate-bundle-id` doesn't open anything when I click"
+
+`urlForApplication(withBundleIdentifier:)` returned nil. Three
+common causes:
+
+- **Typo.** Bundle ids are reverse-DNS strings, case-sensitive.
+  Verify with `osascript -e 'id of app "Safari"'`
+  (replace `Safari` with the app's display name).
+- **The app isn't installed**, or LaunchServices doesn't know
+  about it. Try opening the app from Finder once to force a
+  registration, then click the notification again.
+- **The bundle id resolves to a non-launchable component.**
+  Some framework / helper bundles register a bundle id but
+  aren't directly openable. Use the *main* app's bundle id.
+
+Set `ROAR_DEBUG=1` before clicking to see which id was
+rejected:
+
+```sh
+log show --predicate 'process == "roar"' --last 5m --style compact \
+  | grep -i bundle
+```
+
+## "`--filter-criteria` doesn't seem to do anything"
+
+`--filter-criteria` is a Focus-filter input, not a generic
+delivery filter. macOS only consults it when the user has
+configured a Focus filter that matches against
+`UNMutableNotificationContent.filterCriteria`. If you haven't
+set up a Focus filter for Roar, the value just rides along on
+the notification with no observable effect.
+
+To wire up a Focus filter:
+
+1. System Settings → Focus → (pick a Focus mode, e.g. *Work*).
+2. Under **Allowed People & Apps → Apps**, add Roar.
+3. Click Roar in the list → **Filters** → add a filter
+   matching the criteria string you pass.
+
+The user-controlled string must equal the value you pass to
+`--filter-criteria` for the notification to bypass that Focus.
+See also [Cookbook → Focus and Do-Not-Disturb](COOKBOOK.md#focus-and-do-not-disturb).
+
 ## "`--wait` hangs forever"
 
 It doesn't, but it can sit for up to 5 minutes by default. The
@@ -321,18 +415,27 @@ click a banner, macOS spawns Roar's bundle to receive the click
 delivery. By default Roar is silent in the click path so URLs and
 shell commands don't leak into the unified log under launchd.
 
-Enable verbose stderr logging with `ROAR_DEBUG`:
+Enable verbose stderr logging with `ROAR_DEBUG`. Because the
+click handler is a launchd-style relaunch — not a child of your
+shell — the variable has to be visible to launchd, not just to
+the current shell. Export it once with `launchctl setenv`:
 
 ```sh
-ROAR_DEBUG=1 roar send --body "Click me" --open-url https://example.com
+launchctl setenv ROAR_DEBUG 1
+roar send --title "Click me" --body "Test" --open-url https://example.com
 # Click the banner. Diagnostics now print to stderr in the
 # click-handler process. Find them with:
 log stream --predicate 'process == "roar"' --info --debug
+
+# When done:
+launchctl unsetenv ROAR_DEBUG
 ```
 
 The `ROAR_DEBUG` env var is read fresh on every diagnostic write —
 no caching — so you can flip it on/off across runs without
-restarting anything.
+restarting anything. A one-shot `ROAR_DEBUG=1 roar send ...`
+inline assignment only affects the send-side process; the
+click-time relaunch won't see it.
 
 For send-time errors, `ROAR_DEBUG` is unnecessary: those go to the
 shell's stderr directly. Increased verbosity is mostly useful for
@@ -369,8 +472,9 @@ defaults delete io.myers.roar 2>/dev/null
 # Bounce usernoted (launchd respawns it immediately).
 killall usernoted
 
-# Re-register the bundle.
-lsregister -f /Applications/roar.app
+# Re-register the bundle. lsregister isn't on PATH by default;
+# use the full path inside the CoreServices framework.
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f /Applications/Roar.app
 ```
 
 Then run `roar send --body "test"` and walk through the first-run

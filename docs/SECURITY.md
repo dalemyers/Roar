@@ -5,9 +5,11 @@ bundle identifier (`io.myers.roar`). This document describes what
 Roar defends against, what it deliberately does **not** defend
 against, and the rationale for each gate.
 
-> If you find a security issue, please open a GitHub issue. For
-> sensitive disclosures, see the `SECURITY.md` policy at the
-> repository root (if present) or contact the maintainer directly.
+> If you find a security issue, please open a GitHub issue
+> tagged "security" with as little exploit detail as possible
+> while still being reproducible. See
+> [Reporting a vulnerability](#reporting-a-vulnerability) at the
+> bottom of this page for the full process.
 
 ## Threat model
 
@@ -208,6 +210,12 @@ click handler does **not** re-check the consent flag because the
 consent flag is information the *user* needed at the keyboard, not
 the click handler.
 
+This protects the user-typo case where a familiar-looking
+`roar send` invocation quietly carries an unrelated `--exec`
+payload. It does **not** protect against a process posting under
+the same bundle id and setting `roar.exec.consent=1` directly in
+userInfo — see § 3 below.
+
 ### 3. Same-bundle-id spoofing — what's in scope, what isn't
 
 macOS does not let an app's notification delivery be scoped by
@@ -388,11 +396,14 @@ trips on pathological inputs.
 
 ### 12. stdin cap
 
-When the body is read from a pipe, the read is capped at 1 MB. A
-runaway pipe (`yes | roar send --body -`) hits the cap and Roar
-emits a stderr warning about possible truncation. Without the cap,
-a single misbehaving process could pull arbitrary memory into Roar's
-address space.
+When `--body` is omitted and stdin is piped, the read is capped
+at 1 MB. A runaway pipe (`yes | roar send`) overflows the cap
+and Roar rejects the send with a `ValidationError`. (The cap-
+exact edge case where the writer paused at exactly 1 MB without
+closing emits a stderr "possibly truncated" warning instead, so
+the CLI doesn't block forever on a paused producer.) Without
+the cap, a single misbehaving process could pull arbitrary
+memory into Roar's address space.
 
 ### 13. Identifier length cap
 
@@ -454,10 +465,19 @@ too quickly.
 
 ### 18. Reserved action ids
 
-`default`, `dismiss`, and `timeout` are reserved at parse time so
-custom actions can't collide with the `--wait` stdout protocol.
-A user typing `--action default:Foo` is rejected with the reserved-
-id diagnostic; the stdout receiving end never has to disambiguate.
+`default` and `dismiss` are rejected at parse time so custom
+actions can't collide with the `--wait` stdout protocol's
+default-click / explicit-dismiss sentinels. A user typing
+`--action default:Foo` is rejected with the reserved-id
+diagnostic; the stdout receiving end never has to disambiguate
+those two cases.
+
+`timeout` is **not** currently rejected — there's no
+parse-time guard against `--action timeout:...`. The exit code
+disambiguates a user-action `timeout` (exit 0) from a real
+`--wait-timeout` expiry (exit 2), but shell scripts that branch
+on stdout alone will conflate them. Avoid `timeout` as an
+action id; treat it as soft-reserved.
 
 ## Test coverage
 

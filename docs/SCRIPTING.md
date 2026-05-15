@@ -28,16 +28,16 @@ All codes outside this table are bugs; please report them.
 ### Dispatching on exit code
 
 ```sh
-roar send --wait \
+output=$(roar send --wait \
     --title "Deploy?" \
     --body "Push v3.2.0 to production?" \
-    --action ok:Approve --action no:Reject
+    --action ok:Approve --action no:Reject)
 case $? in
-    0) action=$(...)  # see --wait stdout below
+    0) action=$(printf '%s' "$output" | head -n1)  # see --wait stdout below
        ;;
     2) echo "no answer in time" ;;
     3) echo "user dismissed" ;;
-    *) echo "unexpected ($?)" ;;
+    *) echo "unexpected exit" ;;
 esac
 ```
 
@@ -109,16 +109,24 @@ Exit code `2`. No `--wait-timeout` flag → 5-minute default.
 
 ### Reserved sentinel ids
 
-The short ids `default`, `dismiss`, and `timeout` are **reserved**.
-`roar send --action default:Foo` is rejected at parse time:
+`default` and `dismiss` are **reserved** — Roar rejects them at
+parse time so custom-action stdout can't collide with the
+default-click and explicit-dismiss sentinels:
 
 ```
 --action id 'default' is reserved (it's used to signal the default
 click / explicit dismissal in --wait mode). Choose a different id.
 ```
 
-So your `case`/`switch` arms can always assume those three labels
-mean what they look like.
+`timeout` is **not** currently rejected, but you should still
+avoid it as an action id: a `--action timeout:...` click prints
+`timeout\n` on stdout with exit code 0, while a `--wait-timeout`
+expiry prints the same `timeout\n` with exit code 2. Branching on
+stdout alone can't tell them apart — your shell `case` arm has to
+check `$?` too.
+
+Treat the three labels — `default`, `dismiss`, `timeout` — as
+sentinels you never reuse as user ids.
 
 ## Shell patterns
 
@@ -129,13 +137,19 @@ choice=$(roar send --wait \
     --title "Deploy" \
     --action approve:Approve \
     --action reject:Reject::destructive)
-case "$choice" in
-    approve) ./deploy.sh ;;
-    reject)  echo "rejected by user" ;;
+ec=$?
+case "$ec::$choice" in
+    0::approve) ./deploy.sh ;;
+    0::reject)  echo "rejected by user" ;;
+    2::*)       echo "no answer in time" ;;
+    3::*)       echo "user dismissed" ;;
 esac
-# Exit code is captured separately so dismiss/timeout don't drop into
-# the `case`.
 ```
+
+Branch on `$ec::$choice` (not `$choice` alone) so the timeout
+(exit 2, stdout `timeout`) and explicit-dismiss (exit 3, stdout
+`dismiss`) cases are caught even if a user-defined action shares
+one of those ids.
 
 ### Branch on stdout AND exit code
 
@@ -176,13 +190,16 @@ roar send --wait --text-action reply:Send | {
 deploy completing externally, use a background process:
 
 ```sh
-{ roar send --wait --action ok:Approve > /tmp/choice.txt; \
+{ roar send --wait --title "Approve?" --body "..." --action ok:Approve > /tmp/choice.txt; \
   echo $? > /tmp/choice.exit; } &
 wait_pid=$!
 
 while kill -0 "$wait_pid" 2>/dev/null; do
     if [[ -f /tmp/deploy.done ]]; then
-        kill "$wait_pid"   # send SIGTERM; Roar exits non-zero
+        kill "$wait_pid"   # send SIGTERM; exit code on signalled
+                           # death is shell-defined (~128+signum),
+                           # outside Roar's documented set — don't
+                           # branch on it
         break
     fi
     sleep 1
@@ -193,6 +210,7 @@ done
 
 ```python
 import subprocess
+import sys
 
 result = subprocess.run(
     [
@@ -313,10 +331,11 @@ with the same value on subsequent sends.
 
 ### Identifier length cap
 
-The framework's documented identifier limit is "system-defined."
-Empirical probing puts it around 256 characters before
-`add(_:)` returns an opaque "internal error." Roar enforces the
-256-char cap at validation time so the diagnostic is clean.
+Roar caps identifiers (and `--thread-id`, `--target-content-id`,
+`--filter-criteria`) at 256 characters; longer values are
+rejected at validation time. Rationale and the underlying
+framework behaviour are in
+[Security → identifier length cap](SECURITY.md#13-identifier-length-cap).
 
 ### `--at` is local time unless you specify a zone
 

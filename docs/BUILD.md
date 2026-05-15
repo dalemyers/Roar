@@ -38,7 +38,8 @@ Find the resulting `.app`:
 ```sh
 APP=$(xcodebuild -project Roar.xcodeproj -scheme roar -configuration Release \
     -showBuildSettings 2>/dev/null \
-    | awk -F= '/^[[:space:]]*BUILT_PRODUCTS_DIR/{gsub(/^ +/,"",$2);print $2}')
+    | sed -n 's/^[[:space:]]*BUILT_PRODUCTS_DIR = //p' \
+    | head -n 1)
 echo "Built bundle: $APP/Roar.app"
 ```
 
@@ -80,7 +81,7 @@ ditto "$APP/Roar.app" /Applications/Roar.app
 
 # Re-register so LaunchServices picks up the new build and
 # `usernoted` refreshes its icon cache.
-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister \
   -f /Applications/Roar.app
 killall usernoted 2>/dev/null || true
 ```
@@ -107,8 +108,46 @@ icon reads the `.icns`, not the `.svg`.
 ## Producing a signed, notarised build
 
 Local builds default to ad-hoc signing (`CODE_SIGN_IDENTITY = "-"`),
-which works for testing but won't pass Gatekeeper on someone else's
-machine. The Developer ID + notarisation pipeline runs from CI on
-every `v*` tag push — see the
-[`CI / release` section of the README](https://github.com/dalemyers/Roar#ci--release) for
-the secret provisioning and tag workflow.
+which works for testing but won't pass Gatekeeper on someone
+else's machine. The Developer ID + notarisation pipeline runs
+from CI on every `v*` tag push — see
+[Release](RELEASE.md) for the workflow, the secrets it expects,
+and how to bootstrap the Homebrew tap.
+
+## Permissions, entitlements, build settings
+
+Three different layers of "what is this binary allowed to do,"
+sometimes confused:
+
+- **User notification permission** — granted by the human,
+  per-bundle. Controls banner / sound / badge / time-sensitive
+  affordances. `roar settings` shows the current grant.
+- **Entitlements** — claims the binary makes about what
+  capabilities it requires (hardened-runtime exceptions,
+  app-sandbox holes, time-sensitive notification capability,
+  etc.). Roar's `Resources/roar.entitlements` is minimal —
+  only `com.apple.security.get-task-allow: false`, which
+  blocks debugger attach against the running binary.
+- **Build settings** (`project.yml`'s `settings.base`) —
+  compiler / linker config: hardened runtime on,
+  warnings-as-errors, deployment target. The notary checks
+  some of these (hardened runtime is required for notarisation).
+
+The three are independent. A binary can be hardened, signed,
+and notarised yet still post no notifications if the user
+denied permission; conversely, an unsigned ad-hoc dev build
+can post fine if you grant it permission.
+
+## Distribution channels
+
+Roar ships through three channels, each with a different trust
+shape:
+
+| Channel | Signature | Trust shape |
+|---|---|---|
+| Local dev build | Ad-hoc (`-`) | Trust your own machine; Gatekeeper rejects on download to another. |
+| GitHub Releases (`v*` tag) | Developer ID + notarised + stapled | Anyone downloading passes Gatekeeper offline. |
+| Homebrew cask | Same as GitHub Releases (downloads the .app.zip) | Same trust; cask adds the bin / man symlinks. |
+
+The release pipeline ships only the notarised path — see
+[Release](RELEASE.md) for the workflow.

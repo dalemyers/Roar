@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f /opt/homebrew/bin/roar)",
+      "Bash(rm -f /opt/homebrew/share/man/man1/roar.1)",
+      "Bash(brew install *)",
+      "Bash(roar --version)"
+    ]
+  }
+}

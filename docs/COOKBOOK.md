@@ -16,8 +16,18 @@ edit, run.
 ### Notify when a long-running build finishes
 
 ```sh
-make && roar send --body "Build OK"  || roar send --body "Build FAILED"
+if make; then
+    roar send --body "Build OK"
+else
+    roar send --body "Build FAILED"
+fi
 ```
+
+(The terser `make && roar send "OK" || roar send "FAILED"` form
+looks right but has a precedence trap: if `make` succeeds *and*
+the first `roar send` fails — e.g. notification permission was
+denied — the "FAILED" branch fires too. The `if/then/else` form
+ties the branch to `make`'s exit code alone.)
 
 ### Use the last line of the build log as the body
 
@@ -35,8 +45,15 @@ when `--body` is omitted and stdin is piped:
 make 2>&1 | tail -n 5 | roar send --title "Build complete"
 ```
 
-Cap is 1 MB. Anything larger is truncated with a stderr warning so a
-runaway pipe can't blow up memory.
+Cap is 1 MB. A pipe whose writer keeps writing past the cap is
+**rejected** with a `ValidationError` so a runaway pipe can't
+blow up memory or silently drop bytes. The edge case is a writer
+that fills the cap and then pauses *without* closing the pipe:
+Roar `poll(2)`s briefly, and if the writer hasn't either closed
+or produced more bytes by the time the probe times out, Roar
+emits a "possibly truncated" warning on stderr (rather than
+blocking the CLI indefinitely waiting for the writer to commit).
+The body up to the cap is still posted.
 
 ## Replace-in-place updates
 
@@ -102,11 +119,14 @@ roar send --body "Weekly review" --repeat weekly:fri:16:00
 roar send --body "Pay rent"      --repeat monthly:1:09:00
 ```
 
-The recurring trigger fires until the user explicitly dismisses the
-schedule (or until you `roar clear --pending --all`). Days-of-week
-are lowercase `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun`. HH is 0..23
-(24-hour), MM is 0..59. `monthly:31:...` is allowed — months without
-a 31st are silently skipped by the framework.
+The recurring trigger fires until the user explicitly dismisses
+the schedule, or until you cancel it via `roar clear --pending`
+(scheduled bucket only) or `roar clear --all` (delivered AND
+pending). The two are mutually exclusive — pick one. Days-of-week
+are `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` (any case; lowercase
+shown here for consistency). HH is 0..23 (24-hour), MM is 0..59.
+`monthly:31:...` is allowed — months without a 31st are silently
+skipped by the framework.
 
 ## Click handlers
 
@@ -126,27 +146,11 @@ roar send --body "Open in editor" \
     --allow-url-scheme vscode
 ```
 
-> **Why two flags?** When you type a literal URL, the second flag
-> looks like ceremony — and in *this exact invocation*, it almost
-> is. The defence isn't aimed at the user-typed literal case. It's
-> aimed at the script case:
->
-> ```sh
-> roar send --open-url "$URL"        # what if $URL is "javascript:..."?
-> ```
->
-> Without an allow-list, that would silently post a notification
-> whose click runs JS in your browser. With the allow-list, the
-> send is rejected at parse time and no notification is created.
-> The flag also pins the allowed-scheme set into userInfo so the
-> click handler (which may run minutes or hours later, in a
-> different process) re-validates against exactly what
-> `--allow-url-scheme` agreed to. There is **no global "accept
-> everything" override** — that would be a set-once-and-forget
-> flag, exactly the kind that gets accidentally left on. Full
-> rationale, including what the gate does NOT defend against
-> (same-bundle-id spoofing, hostile https destinations), in
-> [SECURITY.md](SECURITY.md).
+The two-flag shape isn't ceremony — it's a guard for the script
+case where the URL comes from a variable (CI output, webhook,
+env var) and might unexpectedly carry a dangerous scheme. Full
+rationale, including what the gate does NOT defend against, is
+in [Security → URL scheme allow-list](SECURITY.md#1-url-scheme-allow-list-open-url).
 
 Repeat `--allow-url-scheme` for each scheme you want to accept:
 
@@ -295,9 +299,10 @@ roar list --pending              # just scheduled
 roar list --header               # add a TSV header row
 ```
 
-Output is tab-separated: `ID`, `STATUS`, `TIME`, `TITLE`, `BODY`.
-Newlines / tabs / control characters in titles and bodies are
-flattened to spaces (terminal-escape-safe).
+Output is tab-separated. See
+[Reference → roar list output format](reference/list.md#output-format)
+for the canonical column list, types, and the `(unscheduled)`
+placeholder for triggers without a next fire date.
 
 ### Find a notification with awk
 
@@ -451,20 +456,24 @@ replaces the title with "Roar" too.
 ## Debug logging
 
 Roar's click handler is silent by default so click-time URLs and
-shell commands don't leak into the unified log. Enable verbose
-diagnostics by setting `ROAR_DEBUG`:
+shell commands don't leak into the unified log. To see verbose
+diagnostics, the variable has to be visible to launchd (which
+spawns the click-handler process), not just to your shell. Set
+it once per login session with `launchctl setenv`:
 
 ```sh
-ROAR_DEBUG=1 roar send --body "Click me" --open-url https://example.com
+launchctl setenv ROAR_DEBUG 1
+roar send --title "Click me" --body "Test" --open-url https://example.com
 # Click the banner — verbose details on the workspace open, the
-# scheme allow-list, etc. now land on stderr.
+# scheme allow-list, etc. now land in the unified log.
+log show --predicate 'process == "roar"' --info --last 5m
+
+launchctl unsetenv ROAR_DEBUG   # when you're done
 ```
 
-`ROAR_DEBUG` is read by the click handler (out-of-process from your
-shell), so the variable has to be exported into the *send-time*
-environment AND launchd / `usernoted` need to inherit it for the
-click-time delivery. In practice this means `ROAR_DEBUG` is most
-useful during interactive debugging from the same terminal.
+An inline `ROAR_DEBUG=1 roar send ...` only sets the variable for
+the send-side process; the click-time relaunch is a separate
+launchd-spawned process that won't see it.
 
 ## Cleanup
 

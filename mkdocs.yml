@@ -48,9 +48,11 @@ theme:
         name: Switch to light mode
   features:
     # Sticky nav tabs at the top — top-level sections always
-    # visible while scrolling deep into one section.
+    # visible while scrolling deep into one section. We do NOT
+    # enable `navigation.sections` because it forces the whole
+    # sidebar open and gets unwieldy with ~10 top-level pages;
+    # the collapsible default reads better.
     - navigation.tabs
-    - navigation.sections
     - navigation.top
     - navigation.tracking      # URL fragment updates as user scrolls
     - search.highlight
@@ -97,11 +99,21 @@ markdown_extensions:
 # (e.g. "Reference" below).
 nav:
   - Home: index.md
+  - Concepts: CONCEPTS.md
+  - Reference:
+      - Overview: reference/index.md
+      - roar send: reference/send.md
+      - roar list: reference/list.md
+      - roar dismiss: reference/dismiss.md
+      - roar clear: reference/clear.md
+      - roar settings: reference/settings.md
   - Cookbook: COOKBOOK.md
   - Scripting: SCRIPTING.md
+  - FAQ: FAQ.md
   - Security: SECURITY.md
   - Troubleshooting: TROUBLESHOOTING.md
   - Build from source: BUILD.md
+  - Release: RELEASE.md
 
 extra:
   social:
