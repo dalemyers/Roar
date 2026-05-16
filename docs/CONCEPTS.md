@@ -102,13 +102,17 @@ Roar asks for `[.alert, .sound, .provisional]`. Two adjacent
 options are deliberately **not** requested, and the reasons are
 worth knowing:
 
-- **`.timeSensitive`** is deprecated as an authorization option
-  in macOS 12+; the entitlement
-  `com.apple.developer.usernotifications.time-sensitive` is now
-  the gating mechanism, and an ad-hoc-signed CLI can't claim
-  it. `--interruption-level time-sensitive` still flows
-  through, but its actual break-through behaviour depends on
-  the user's Focus configuration, not on Roar's auth grant.
+- **Time-sensitive break-through** is not an `UNAuthorizationOptions`
+  bit at all — the public option set is `.alert`, `.badge`,
+  `.sound`, `.carPlay`, `.criticalAlert`,
+  `.providesAppNotificationSettings`, and `.provisional`, with no
+  time-sensitive entry. The gating mechanism is the
+  `com.apple.developer.usernotifications.time-sensitive`
+  entitlement, which is paid-Apple-approval-gated and not claimed
+  by Roar's minimal entitlement set.
+  `--interruption-level time-sensitive` still flows through, but
+  its actual break-through behaviour depends on the user's Focus
+  configuration, not on Roar's auth grant.
 - **`.critical`** requires Apple-approved entitlement (per-
   developer); not available to an unentitled bundle. Roar
   deliberately doesn't expose `--interruption-level critical`.

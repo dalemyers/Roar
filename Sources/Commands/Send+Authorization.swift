@@ -44,19 +44,20 @@ extension Send {
     /// Build the `UNAuthorizationOptions` set used in `requestAuthorization`.
     /// Always includes `.alert`, `.sound`, and `.provisional`.
     ///
-    /// `.timeSensitive` is intentionally NOT included here: as of
-    /// macOS 12 it is deprecated in `UNAuthorizationOptions` in favour
-    /// of the `com.apple.developer.usernotifications.time-sensitive`
-    /// entitlement, which Apple gates behind a paid developer
-    /// account / explicit approval. An ad-hoc-signed CLI (which is
-    /// what roar ships as) cannot claim that entitlement, so even if
-    /// we asked for the deprecated bit at runtime macOS would refuse
-    /// to honour `--interruption-level time-sensitive` past whatever
-    /// the user's current Focus configuration already allows. The
-    /// flag is still wired through to `content.interruptionLevel`
-    /// because it works as a *hint* to the framework — passive levels
-    /// still demote correctly, and a future signed build of roar can
-    /// add the entitlement without touching this call site.
+    /// Time-sensitive break-through is not surfaced through
+    /// `UNAuthorizationOptions` at all — the public option set is
+    /// `.alert`, `.badge`, `.sound`, `.carPlay`, `.criticalAlert`,
+    /// `.providesAppNotificationSettings`, and `.provisional`, with
+    /// no time-sensitive entry. The gating mechanism is the
+    /// `com.apple.developer.usernotifications.time-sensitive`
+    /// entitlement, which Apple gates behind paid developer
+    /// approval and Roar's minimal entitlement set deliberately
+    /// does not claim. `--interruption-level time-sensitive` is
+    /// still wired through to `content.interruptionLevel` because
+    /// it works as a *hint* to the framework — passive levels
+    /// still demote correctly, and a future build that claims the
+    /// entitlement gets break-through behaviour without touching
+    /// this call site.
     ///
     /// `nonisolated static` so tests can pin the rule without
     /// invoking the real authorization API.
@@ -119,13 +120,16 @@ extension Send {
     /// better — a user who explicitly wanted banners can promote in one
     /// click, while a cron job no longer hangs on an off-screen prompt.
     ///
-    /// `.timeSensitive` is NOT requested here: as of macOS 12 the
-    /// `UNAuthorizationOptions.timeSensitive` bit is deprecated in
-    /// favour of the `com.apple.developer.usernotifications.time-sensitive`
-    /// entitlement, which an ad-hoc-signed CLI cannot claim. See
-    /// `authorizationOptions()` for the full rationale.
-    /// A future signed build can change the helper without touching
-    /// this call site.
+    /// Time-sensitive break-through is not requested here:
+    /// `UNAuthorizationOptions` has no time-sensitive bit (only
+    /// `.alert`, `.badge`, `.sound`, `.carPlay`, `.criticalAlert`,
+    /// `.providesAppNotificationSettings`, `.provisional`). The
+    /// gating mechanism is the
+    /// `com.apple.developer.usernotifications.time-sensitive`
+    /// entitlement, which Roar's minimal entitlement set does not
+    /// claim. See `authorizationOptions()` for the full rationale.
+    /// A future build that claims the entitlement can change the
+    /// helper without touching this call site.
     func requestAuthorizationOrExit(center: UNUserNotificationCenter) async throws {
         let granted = try await center.requestAuthorization(
             options: Self.authorizationOptions())

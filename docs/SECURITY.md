@@ -1,9 +1,16 @@
 # Roar Security Model
 
-Roar is an ad-hoc-signed CLI that posts notifications under a fixed
-bundle identifier (`io.myers.roar`). This document describes what
-Roar defends against, what it deliberately does **not** defend
-against, and the rationale for each gate.
+Roar is a Developer ID-signed, notarised CLI that posts
+notifications under a fixed bundle identifier (`io.myers.roar`).
+The entitlement set is deliberately minimal — no critical-alert,
+no time-sensitive, no app-sandbox holes — so the threat surface
+matches a stock unentitled bundle rather than a privileged one.
+Local dev builds default to ad-hoc signing for the same reason
+(no inherited Developer ID privileges during iteration); the
+distributed `.app.zip` and Homebrew cask deliver the notarised
+artifact. This document describes what Roar defends against, what
+it deliberately does **not** defend against, and the rationale
+for each gate.
 
 > If you find a security issue, please open a GitHub issue
 > tagged "security" with as little exploit detail as possible
