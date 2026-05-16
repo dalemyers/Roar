@@ -286,6 +286,30 @@ can take several seconds to dispatch the delegate callback.
 Empirically the worst observed dispatch latencies cluster around 
 5-8 seconds.
 
+## Output modes (text vs JSON)
+
+Every subcommand has two output formats: a human-readable text
+default and a structured JSON form (selected by `--json`).
+**Exit codes are identical across modes**, so scripts that
+branch on `$?` work unchanged when you flip the flag on.
+
+The split exists for one reason — different consumers need
+different shapes:
+
+- **Humans + shell pipelines that already use `awk` / `grep`**:
+  the text format. TSV for `list`, line-oriented `key: value`
+  for `settings`, and the `--wait` text protocol
+  (`<action>\n<text>?\n`) for interactive prompts.
+- **Scripts that want a parser instead of a regex**: `--json`.
+  Single-line, sorted-keys JSON ready for `jq`. Optional
+  fields always appear as `null` rather than being omitted,
+  so `jq '.text'` always returns a value.
+
+Schemas are per-subcommand and stable scripting ABI — see each
+subcommand's [reference page](reference/index.md) for the field
+documentation. Cross-cutting overview and `jq` patterns in
+[Scripting → JSON output](SCRIPTING.md#json-output-json).
+
 ## Permissions and distribution
 
 How the three permission / entitlement / build-setting layers

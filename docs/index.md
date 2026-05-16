@@ -62,7 +62,8 @@ offline without further dance.
   subcommand. The Ctrl-F page.
 - **[Cookbook](COOKBOOK.md)** — task-oriented recipes.
 - **[Scripting](SCRIPTING.md)** — the `--wait` stdout protocol,
-  exit codes, and patterns for shell / Python / CI.
+  the `--json` output mode (every subcommand), exit codes, and
+  patterns for shell / Python / CI.
 - **[FAQ](FAQ.md)** — recurring design / scope questions.
 - **[Security](SECURITY.md)** — full threat model and per-gate
   rationale.

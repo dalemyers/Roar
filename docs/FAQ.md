@@ -301,6 +301,30 @@ and is treated as ABI for scripting purposes. Adding columns
 to the right would be a minor-version break; removing or
 re-ordering would be major.
 
+### Can I parse Roar's output as JSON instead of text?
+
+Yes. Every subcommand accepts `--json`:
+
+```sh
+roar list --json | jq -r '.[].identifier'
+roar settings --json | jq -r '."authorization-status"'
+
+choice=$(roar send --wait --title "Deploy?" \
+    --action go:Go --action stop:Stop --wait-timeout 30s --json)
+case "$(jq -r .outcome <<<"$choice")" in
+    click)   echo "user picked $(jq -r .action <<<"$choice")" ;;
+    dismiss) echo "rejected" ;;
+    timeout) echo "no answer" ;;
+esac
+```
+
+Exit codes are unchanged from text mode, so scripts that branch
+on `$?` keep working. Per-subcommand schemas live on each
+[reference page](reference/index.md) under "JSON output"; the
+cross-cutting overview is in
+[Scripting → JSON output](SCRIPTING.md#json-output-json). All
+schemas are treated as stable ABI.
+
 ### Is there a Python / Ruby / Node.js library?
 
 No first-party library; `roar` is a CLI, and the `--wait`

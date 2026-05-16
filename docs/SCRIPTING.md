@@ -128,6 +128,107 @@ check `$?` too.
 Treat the three labels — `default`, `dismiss`, `timeout` — as
 sentinels you never reuse as user ids.
 
+## JSON output (`--json`)
+
+Every subcommand accepts a `--json` flag that swaps the text
+format for a single JSON value on stdout. **Exit codes are
+unchanged across modes** — scripts that already branch on `$?`
+work identically. JSON mode is the right choice when:
+
+- You'd rather not parse the text protocol's line layout (especially
+  for `--wait` with `--text-action`, where the typed text can
+  contain newlines).
+- You're already piping through `jq` for downstream filtering.
+- You want a coarse outcome field (`click` / `dismiss` / `timeout`)
+  without having to write the if-else over `$?` first.
+
+Per-subcommand schemas (each is stable scripting ABI — additions
+allowed, renames / removals are major-version breaks):
+
+| Subcommand | Shape |
+|---|---|
+| `roar send` (no `--wait`) | `{"identifier":"<id>","posted":true}` |
+| `roar send --wait` | `{"outcome":"click"\|"dismiss"\|"timeout","action":"<id>","text":<string>\|null}` |
+| `roar list` | `[{"bucket":"delivered"\|"pending","when":"<iso>"\|null,"identifier":"...","title":"...","body":"..."},...]` |
+| `roar dismiss` | `{"requested":[...],"unknown":[...]}` |
+| `roar clear` | `{"delivered_cleared":bool,"pending_cleared":bool,"categories_pruned":bool}` |
+| `roar settings` | `{"authorization-status":"...","alert-setting":"...", …}` |
+
+Full field documentation for each shape lives on the
+corresponding [reference page](reference/index.md).
+
+The JSON encoder uses sorted keys, no pretty-printing — output
+is single-line, deterministic across runs. Optional fields are
+always emitted as `null` rather than omitted, so `jq '.text'`
+always returns a value (string or null) whether the user typed a
+reply or not.
+
+### Switching on the JSON outcome
+
+The `--wait` JSON shape's `outcome` field collapses the four
+text-protocol cases into three coarse buckets. The exit code is
+still set (0 / 2 / 3); pick whichever style fits the script:
+
+```sh
+# Branch on outcome via jq
+r=$(roar send --wait --title "Deploy?" \
+    --action go:Go --action stop:Stop \
+    --wait-timeout 30s --json)
+case "$(jq -r .outcome <<<"$r")" in
+    click)
+        action=$(jq -r .action <<<"$r")
+        echo "user picked $action"
+        ;;
+    dismiss) echo "rejected" ;;
+    timeout) echo "no answer" ;;
+esac
+
+# Same logic via exit code (also works under --json)
+roar send --wait --title "Deploy?" --json --wait-timeout 30s
+case $? in
+    0) echo "click or button" ;;
+    2) echo "timeout" ;;
+    3) echo "dismiss" ;;
+esac
+```
+
+### Reading a `--text-action` reply cleanly
+
+The text protocol has the well-known "read to EOF" caveat —
+embedded newlines in the user's typed reply would break a
+line-by-line read. JSON sidesteps it entirely:
+
+```sh
+result=$(roar send --wait --title "Note?" \
+    --text-action add:Add --json)
+note=$(jq -r .text <<<"$result")   # JSON-decoded, newlines intact
+```
+
+### Parsing `roar list` without `awk`
+
+```sh
+# Identifiers of every delivered notification
+roar list --delivered --json | jq -r '.[].identifier'
+
+# Dismiss everything older than a cutoff (rough — JSON timestamps
+# are strings; sort lexicographically as ISO 8601 allows)
+cutoff="2026-05-15T00:00:00Z"
+roar list --delivered --json \
+    | jq -r --arg cutoff "$cutoff" \
+        '.[] | select(.when < $cutoff) | .identifier' \
+    | xargs -r roar dismiss
+```
+
+### Confirming a `roar clear` scope
+
+`roar clear` is silent on stdout by default. Use `--json` to
+confirm what was actually cleared (handy in CI logs):
+
+```sh
+roar clear --pending --json
+# {"categories_pruned":false,"delivered_cleared":false,"pending_cleared":true}
+```
+
 ## Shell patterns
 
 ### Capture an action id, branch on it

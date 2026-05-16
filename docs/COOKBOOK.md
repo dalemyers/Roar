@@ -348,6 +348,41 @@ roar clear --all --categories    # clear everything, then prune
 The prune uses a double-snapshot protocol so a concurrent `roar
 send` doesn't get clobbered.
 
+## Parsing output with `jq` (`--json`)
+
+Every subcommand accepts `--json`, swapping the text format for
+a single JSON value on stdout. Useful when you want a real
+parser instead of `awk -F$'\t'`.
+
+```sh
+# Dismiss every delivered notification older than a cutoff
+cutoff="2026-05-15T00:00:00Z"
+roar list --delivered --json \
+    | jq -r --arg c "$cutoff" '.[] | select(.when < $c) | .identifier' \
+    | xargs -r roar dismiss
+
+# Capture a minted identifier for a follow-up update
+id=$(roar send --title "Build…" --body "running" --json | jq -r .identifier)
+# … later
+roar send --identifier "$id" --title "Build" --body "done" --sound Glass
+
+# Wait for a button, branch on the coarse outcome
+r=$(roar send --wait --title "Deploy?" \
+        --action go:Go --action stop:Stop::destructive \
+        --wait-timeout 30s --json)
+case "$(jq -r .outcome <<<"$r")" in
+    click)   ./deploy.sh ;;
+    dismiss) echo "user declined" ;;
+    timeout) echo "no answer in 30s" ;;
+esac
+```
+
+Schemas are stable scripting ABI — per-subcommand fields are
+documented under each
+[reference page](reference/index.md)'s "JSON output" section, with
+a cross-cutting overview in
+[Scripting → JSON output](SCRIPTING.md#json-output-json).
+
 ## In CI
 
 ### Notify on job completion

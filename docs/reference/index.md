@@ -49,6 +49,20 @@ See [Versioning](#versioning) below for the field meanings.
 
 Print the help text and exit.
 
+### `--json`
+
+Available on every subcommand (`send`, `list`, `dismiss`,
+`clear`, `settings`). Swaps the subcommand's default text output
+for a single JSON value on stdout. Exit codes and stderr
+behaviour are unchanged. The per-subcommand JSON schema is
+documented in that subcommand's reference page under "JSON
+output"; for a cross-cutting overview and `jq` patterns see
+[Scripting → JSON output](../SCRIPTING.md#json-output-json).
+
+The schema for each subcommand is treated as stable scripting
+ABI — fields may be added in future versions, but renames or
+removals are major-version breaks.
+
 ---
 
 ## Environment variables
