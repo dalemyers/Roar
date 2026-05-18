@@ -82,7 +82,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag || github.ref }}
           # The default fetch depth is 1 (shallow); fetch the tag
@@ -380,7 +380,7 @@ jobs:
         # release pipeline. The trailing comment notes the human-
         # readable version so Dependabot can bump both the SHA and
         # the comment in lockstep.
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           # When the workflow was triggered by a tag push,
           # `github.ref` is the tag ref; the action uses that to
