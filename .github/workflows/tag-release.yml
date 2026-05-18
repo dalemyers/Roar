@@ -1,0 +1,76 @@
+# Create a new semver tag.
+#
+# Manually triggered via the Actions UI. Prompts for the release
+# type (major, minor, or patch), computes the next version from the
+# latest existing `v*` tag, creates and pushes the new tag.
+
+name: Tag Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Release type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: version
+        run: |
+          # Find the latest v* tag reachable from HEAD, falling back
+          # to v0.0.0 if no tags exist yet.
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [[ -z "$latest" ]]; then
+            latest="v0.0.0"
+          fi
+
+          # Strip the leading 'v' and split into components.
+          version="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+
+          case "${{ inputs.release_type }}" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          next="v${major}.${minor}.${patch}"
+          echo "previous=$latest" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.next }}"
+          git push origin "${{ steps.version.outputs.next }}"
+
+      - name: Summary
+        run: |
+          echo "### 🏷️ Tagged ${{ steps.version.outputs.next }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Previous tag: \`${{ steps.version.outputs.previous }}\`" >> "$GITHUB_STEP_SUMMARY"
