@@ -526,13 +526,18 @@ jobs:
           Sourced from \`homebrew-tap/Casks/roar.rb\` in the source repo.
           EOF
           )
-          gh pr create \
+          PR_URL=$(gh pr create \
             --repo dalemyers/homebrew-tap \
             --head "$BRANCH" \
             --base main \
             --title "Bump roar to $VERSION" \
             --body "$BODY" \
-            || echo "PR already exists for $BRANCH; not re-opening."
+            2>&1) || echo "PR already exists for $BRANCH; not re-opening."
+
+          # Auto-merge the PR if it was created successfully.
+          if [[ "$PR_URL" == https://* ]]; then
+            gh pr merge "$PR_URL" --merge --delete-branch
+          fi
 
       # ---------------------------------------------------------------
       # Clean up the temp keychain. `if: always()` so a failed
