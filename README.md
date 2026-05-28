@@ -14,12 +14,6 @@ notification.
 roar send --title "Build complete" --body "$(git log -1 --pretty=%B)"
 ```
 
-`roar` is an ad-hoc-signed AppKit bundle with no UI surface (it sets
-`LSUIElement: true`), so notifications post quietly and the binary
-behaves like a normal terminal CLI: it exits as soon as `usernoted`
-has accepted the request, or when the user interacts (in `--wait`
-mode).
-
 ---
 
 ## Subcommands
@@ -37,41 +31,7 @@ reference.
 
 ### Deeper docs
 
-The narrative documentation is rendered at
-**[roarcli.readthedocs.io](https://roarcli.readthedocs.io/)** —
-searchable, with light/dark theme toggle and per-page edit links
-back here. The source lives in `docs/`:
-
-- [`docs/CONCEPTS.md`](docs/CONCEPTS.md) — how macOS notifications
-  work end-to-end, why Roar is a bundle-with-a-CLI, identifiers /
-  threads / categories, the `--wait` lifecycle.
-- [`docs/reference/`](docs/reference/index.md) — exhaustive
-  flag-by-flag reference. One page per subcommand
-  ([`send`](docs/reference/send.md), [`list`](docs/reference/list.md),
-  [`dismiss`](docs/reference/dismiss.md), [`clear`](docs/reference/clear.md),
-  [`settings`](docs/reference/settings.md)), plus the overview
-  page covering global flags, exit codes, versioning, and the
-  installed layout.
-- [`docs/COOKBOOK.md`](docs/COOKBOOK.md) — recipes: build-status
-  banners, replyable prompts, scheduled reminders, in-place updates,
-  attachment thumbnails.
-- [`docs/SCRIPTING.md`](docs/SCRIPTING.md) — the `--wait` stdout
-  protocol, exit-code dispatch, and patterns for shell, Python, and
-  CI integration.
-- [`docs/FAQ.md`](docs/FAQ.md) — recurring questions about design
-  and scope: install, upgrade, permissions, cross-platform.
-- [`docs/SECURITY.md`](docs/SECURITY.md) — full threat model: URL
-  scheme allow-list, `--exec` consent gate, attachment hardening,
-  same-bundle-id spoofing limits, userInfo bounds.
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — symptom →
-  fix for silent notifications, Focus filters, sound-name
-  lookups, provisional auth, debug logging.
-- [`docs/BUILD.md`](docs/BUILD.md) — build from source: requirements,
-  the `xcodegen` + `xcodebuild` flow, testing, lint, installing a
-  local build over the released one, and regenerating the app icon.
-- [`docs/RELEASE.md`](docs/RELEASE.md) — the release pipeline:
-  CI workflows, signing / notarisation secrets, tag-and-push,
-  and bootstrapping the Homebrew tap.
+Full documentation can be found at **[roarcli.readthedocs.io](https://roarcli.readthedocs.io/)**
 
 ---
 
@@ -118,7 +78,7 @@ roar send --title "Switch to Safari" --body "Tap to focus" \
     --activate-bundle-id com.apple.Safari
 ```
 
-Scheduled delivery — fire after a delay or at a specific time:
+Scheduled delivery (fire after a delay or at a specific time):
 
 ```sh
 roar send --title "Standup" --body "Meeting in 5 min" --in 5m
@@ -153,7 +113,7 @@ esac
 and `mailto` are accepted. To open any other scheme add it
 explicitly with `--allow-url-scheme <scheme>` (repeat for
 multiple). There is **no "accept everything" override** by
-design — schemes like `javascript:`, `file:`, `applescript:`,
+design. Schemes like `javascript:`, `file:`, `applescript:`,
 `afp:` carry click-time RCE / script-exec / auto-mount side
 effects that aren't obvious from the URL text.
 
@@ -169,17 +129,17 @@ of dangerous schemes and why each one matters, see
 
 `roar`'s click handler trusts the notification's userInfo to tell
 it what to do on click. macOS does not scope notification delivery
-by process identity — any same-user process posting under
+by process identity which means any same-user process posting under
 `io.myers.roar` can craft a notification whose userInfo asks the
 click handler to exec a command. The `--allow-shell-on-click`
 opt-in is enforced at **send time** by `roar send`, not at click
 time by the system.
 
 This is inherent to the ad-hoc-signed local-CLI threat model and
-not unique to Roar. The full discussion — what the defences DO
+not unique to Roar. The full discussion, what the defences DO
 close (NUL-byte rejection, URL scheme allow-list, attachment
 hardening, environment scrubbing on `posix_spawn`) and what they
-deliberately don't — is in
+deliberately don't, is in
 [docs/SECURITY.md](docs/SECURITY.md#3-same-bundle-id-spoofing-whats-in-scope-what-isnt).
 
 ---
@@ -200,7 +160,7 @@ That single command:
 
 - Downloads the notarised, stapled `Roar.app` from the latest GitHub
   release.
-- Installs it to `/Applications/Roar.app`.
+- Installs it to `/Applications/Roar.app`. (Details on why this needs an app bundle can be found in the documentation)
 - Symlinks the embedded binary onto your Homebrew bin path
   (`/opt/homebrew/bin/roar` on Apple Silicon, `/usr/local/bin/roar`
   on Intel) so `roar` works from any shell.
@@ -249,7 +209,7 @@ ln -sf /Applications/Roar.app/Contents/MacOS/roar \
 ln -sf /Applications/Roar.app/Contents/Resources/man/man1/roar.1 \
        /opt/homebrew/share/man/man1/roar.1
 
-# Intel (Homebrew prefix /usr/local) — also works on systems without
+# Intel (Homebrew prefix /usr/local) This also works on systems without
 # Homebrew if you have write access to /usr/local:
 ln -sf /Applications/Roar.app/Contents/MacOS/roar \
        /usr/local/bin/roar
@@ -270,11 +230,9 @@ export MANPATH="/Applications/Roar.app/Contents/Resources/man:${MANPATH:-}"
   exec'd from Terminal, macOS attributes notifications to
   Terminal's `responsible_pid` for icon purposes, regardless of
   `roar`'s own bundle identifier. Click handlers, permissions, and
-  every other attribution route to Roar correctly — only the
-  banner glyph is affected. Fix is non-trivial (requires a private
-  Darwin API in a way that interacts badly with the hardened
-  runtime) and tracked as a separate piece of work.
-
+  every other attribution route to Roar correctly. Only the
+  banner glyph is affected. This is inconsistent though. If you know why this
+  is happening, please let me know!
 ---
 
 ## Build from source
@@ -298,19 +256,6 @@ Man page:
 
 ---
 
-## CI / release
-
-CI runs SwiftLint + tests on every push and PR, a nightly test
-run catches Apple-side regressions, and tagged releases
-auto-build a notarised `.app` and (optionally) auto-PR a cask
-bump to the Homebrew tap.
-
-Full details — workflow descriptions, the secrets the release
-job needs, how to tag a release, and how to bootstrap the
-Homebrew tap repo — live in [`docs/RELEASE.md`](docs/RELEASE.md).
-
----
-
 ## Exit codes
 
 | Code | Meaning |
@@ -320,4 +265,4 @@ Homebrew tap repo — live in [`docs/RELEASE.md`](docs/RELEASE.md).
 | 2    | `--wait` timeout elapsed (`timeout` printed on stdout) |
 | 3    | `--wait` user dismissed the notification (`dismiss` printed) |
 | 4    | `roar dismiss <id>` and no id matched any delivered or pending |
-| 64   | EX_USAGE — ArgumentParser rejected the invocation |
+| 64   | ArgumentParser rejected the invocation |
