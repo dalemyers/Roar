@@ -8,7 +8,16 @@ options:
 packages:
   ArgumentParser:
     url: https://github.com/apple/swift-argument-parser
-    from: 1.3.0
+    # 1.8.0 shipped a breaking change that shadowed the inherited
+    # synchronous `ParsableCommand.parse(_:)` with an async overload
+    # on `AsyncParsableCommand`, which broke every `try Command.parse(...)`
+    # call site in our async test methods (the compiler resolved them
+    # to the new async overload, requiring `await`). The change was
+    # reverted in 1.8.1 — the async entry point was renamed to
+    # `asyncParse(_:)` so the sync `parse` is back. Pinning the
+    # floor to 1.8.1 keeps the nightly's fresh resolution from ever
+    # selecting 1.8.0 and re-breaking the tests.
+    from: 1.8.1
 
 targets:
   roar:
