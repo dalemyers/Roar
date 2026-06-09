@@ -192,97 +192,135 @@ final class CalendarRepeatTests: XCTestCase {
         XCTAssertEqual(comps.day, 31)
     }
 
-    /// End-to-end pinning of UN's behaviour for `monthly:31` in
-    /// February: build a real `UNCalendarNotificationTrigger` from
-    /// the parsed components, ask it for its next fire date after
-    /// 2026-02-01, and assert that UN does NOT silently fire on
-    /// March 31 or earlier — it skips the months that have no 31st
-    /// and lands on the next month that does.
+    /// Pins UN's *actual* contract for `monthly:31` when the relevant
+    /// month has no 31st. Contrary to a natural expectation, UN does
+    /// NOT skip to the next 31-day month — verified on macOS 26.5, it
+    /// resolves the non-existent date using the
+    /// `.nextTimePreservingSmallerComponents` matching policy, which
+    /// rolls the fire FORWARD to the 1st of the following month. So
+    /// `monthly:31` evaluated during a 30-day month fires on the 1st,
+    /// not the 31st.
     ///
-    /// This test pins UN's contract: `repeats: true` on a
-    /// `DateComponents` that names a day that doesn't exist in the
-    /// current month produces a `nextTriggerDate` of the day in the
-    /// next-matching month (March 31 for Feb-starting queries),
-    /// rather than clamping to Feb 28/29 or returning `nil`. A
-    /// future macOS version that changes this (e.g. by clamping) is
-    /// exactly the kind of silent regression this test catches —
-    /// without it, users would start getting Feb-28 notifications
-    /// when they asked for the 31st.
-    func testMonthlyThirtyFirstSkipsFebruary() throws {
+    /// The earlier version of this test asserted the day was always 31
+    /// and was silently date-dependent: it read the real wall clock via
+    /// `nextTriggerDate()`, so it passed when run during a 31-day month
+    /// and failed during a 30-day month (e.g. June). Both assertions
+    /// below are independent of the run date.
+    ///
+    /// 1. A pinned-reference `Calendar` check documents the exact
+    ///    rollover (June → July 1) with no dependency on `Date()`.
+    /// 2. A live check pins that UN itself still uses this policy, so a
+    ///    future macOS that switches the trigger to `.strict` (which
+    ///    *would* skip to the next 31-day month) is caught.
+    func testMonthlyThirtyFirstRollsToFirstOfNextMonth() throws {
         let comps = try Send.parseCalendarRepeat("monthly:31:08:00")
+        let calendar = Calendar(identifier: .gregorian)
+
+        // (1) Deterministic: from mid-June 2026 (a 30-day month), the
+        // preserving-smaller-components policy rolls "June 31 08:00"
+        // forward to July 1 08:00. `.strict` would instead skip to
+        // July 31 — asserting day == 1 pins that UN is NOT using strict.
+        var refComps = DateComponents()
+        refComps.year = 2026
+        refComps.month = 6
+        refComps.day = 15
+        refComps.hour = 12
+        refComps.minute = 0
+        refComps.timeZone = TimeZone.current
+        let ref = try XCTUnwrap(
+            calendar.date(from: refComps), "Could not construct 2026-06-15")
+        let rolled = try XCTUnwrap(
+            calendar.nextDate(
+                after: ref, matching: comps,
+                matchingPolicy: .nextTimePreservingSmallerComponents),
+            "Calendar returned nil for monthly:31 from June 15")
+        let rolledComps = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: rolled)
+        XCTAssertEqual(rolledComps.month, 7,
+                       "Expected rollover into July; got \(rolledComps)")
+        XCTAssertEqual(rolledComps.day, 1,
+                       "Expected rollover to the 1st (not a skip to the 31st); got \(rolledComps)")
+        XCTAssertEqual(rolledComps.hour, 8)
+        XCTAssertEqual(rolledComps.minute, 0)
+
+        // (2) Live: the real trigger's next fire agrees with the
+        // preserving-smaller-components policy evaluated at the same
+        // instant. The two calls sample `now` microseconds apart and
+        // the policy preserves sub-minute components, so exact equality
+        // would be brittle — a tolerance absorbs the inter-call delta.
+        // A *policy change* (e.g. to `.strict`) moves the fire by days,
+        // far outside this window, so the regression is still caught.
         let trigger = UNCalendarNotificationTrigger(
             dateMatching: comps, repeats: true)
-
-        // 2026-02-01 — a non-leap Feb (29 days for the next month
-        // means UN skips Feb entirely; March is the next 31-day month).
-        var feb1Components = DateComponents()
-        feb1Components.year = 2026
-        feb1Components.month = 2
-        feb1Components.day = 1
-        feb1Components.hour = 0
-        feb1Components.minute = 0
-        feb1Components.timeZone = TimeZone(identifier: "UTC")
-        let calendar = Calendar(identifier: .gregorian)
-        guard let feb1 = calendar.date(from: feb1Components) else {
-            XCTFail("Could not construct 2026-02-01")
-            return
-        }
-
-        guard let next = trigger.nextTriggerDate() else {
-            XCTFail("UN returned nil for monthly:31 trigger")
-            return
-        }
-
-        // Verify the next fire is strictly later than Feb 1 (which
-        // is the trigger build-time, and trivially earlier than any
-        // matching date) and falls on the 31st of a 31-day month.
-        XCTAssertGreaterThan(next, feb1)
-
-        // The actual landing month depends on when UN evaluated the
-        // trigger. The strong invariant we want to pin is the *day*:
-        // it must be the 31st (UN honoured the `day=31` component).
-        // If UN had clamped to Feb 28, this would fail. If UN had
-        // returned `nil`, the guard above would fail.
-        let nextComps = calendar.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: next
-        )
-        XCTAssertEqual(nextComps.day, 31,
-                       "Expected next fire on the 31st; got \(nextComps)")
-        XCTAssertEqual(nextComps.hour, 8)
-        XCTAssertEqual(nextComps.minute, 0)
-        // UN must NOT have picked February (Feb has no 31st). Months
-        // with 31 days: 1, 3, 5, 7, 8, 10, 12. Pin that the landing
-        // is one of those.
-        let thirtyOneDayMonths: Set<Int> = [1, 3, 5, 7, 8, 10, 12]
-        XCTAssertTrue(
-            thirtyOneDayMonths.contains(nextComps.month ?? -1),
-            "Expected next fire in a 31-day month; got month \(nextComps.month ?? -1)"
-        )
+        let unNext = try XCTUnwrap(
+            trigger.nextTriggerDate(), "UN returned nil for monthly:31 trigger")
+        let policyNext = try XCTUnwrap(
+            Calendar.current.nextDate(
+                after: Date(), matching: comps,
+                matchingPolicy: .nextTimePreservingSmallerComponents),
+            "Calendar returned nil for live monthly:31")
+        XCTAssertEqual(
+            unNext.timeIntervalSince(policyNext), 0, accuracy: 90,
+            "UN's matching policy diverged from .nextTimePreservingSmallerComponents")
     }
 
-    /// Same UN-contract pin for `monthly:29` in a non-leap-year
-    /// February. UN should advance to the next month that has a
-    /// 29th rather than silently clamping or returning `nil`. Every
-    /// month except non-leap Feb has a 29th, so the test cares
-    /// primarily that the day component is preserved.
-    func testMonthlyTwentyNinthSkipsNonLeapFebruary() throws {
+    /// Same rollover-contract pin for `monthly:29` in a non-leap-year
+    /// February. Like `monthly:31`, UN does NOT skip to the next month
+    /// that has a 29th — verified on macOS 26.5, the
+    /// `.nextTimePreservingSmallerComponents` policy rolls a non-leap
+    /// "February 29 08:00" forward to March 1 08:00. (Every month
+    /// except non-leap February has a 29th, so this is the only month
+    /// where the rollover surfaces for `:29`.)
+    ///
+    /// Deterministic via a pinned February-2026 (non-leap) reference,
+    /// rather than the wall-clock-dependent `nextTriggerDate()` the
+    /// prior version relied on.
+    func testMonthlyTwentyNinthRollsPastNonLeapFebruary() throws {
         let comps = try Send.parseCalendarRepeat("monthly:29:08:00")
+        let calendar = Calendar(identifier: .gregorian)
+
+        // From early Feb 2026 (non-leap; Feb has 28 days), "Feb 29"
+        // does not exist, so the policy rolls forward to March 1.
+        // `.strict` would instead skip to March 29 — asserting day == 1
+        // pins that UN is NOT using strict.
+        var refComps = DateComponents()
+        refComps.year = 2026
+        refComps.month = 2
+        refComps.day = 5
+        refComps.hour = 12
+        refComps.minute = 0
+        refComps.timeZone = TimeZone.current
+        let ref = try XCTUnwrap(
+            calendar.date(from: refComps), "Could not construct 2026-02-05")
+        let rolled = try XCTUnwrap(
+            calendar.nextDate(
+                after: ref, matching: comps,
+                matchingPolicy: .nextTimePreservingSmallerComponents),
+            "Calendar returned nil for monthly:29 from Feb 5")
+        let rolledComps = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute], from: rolled)
+        XCTAssertEqual(rolledComps.month, 3,
+                       "Expected rollover into March; got \(rolledComps)")
+        XCTAssertEqual(rolledComps.day, 1,
+                       "Expected rollover to the 1st (not a skip to the 29th); got \(rolledComps)")
+        XCTAssertEqual(rolledComps.hour, 8)
+        XCTAssertEqual(rolledComps.minute, 0)
+
+        // Live: the real trigger agrees with the policy at the same
+        // instant (tolerance absorbs the inter-call `now` delta; a
+        // switch to `.strict` would move the fire by days).
         let trigger = UNCalendarNotificationTrigger(
             dateMatching: comps, repeats: true)
-        guard let next = trigger.nextTriggerDate() else {
-            XCTFail("UN returned nil for monthly:29 trigger")
-            return
-        }
-        let calendar = Calendar(identifier: .gregorian)
-        let nextComps = calendar.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: next
-        )
-        XCTAssertEqual(nextComps.day, 29,
-                       "Expected next fire on the 29th; got \(nextComps)")
-        XCTAssertEqual(nextComps.hour, 8)
-        XCTAssertEqual(nextComps.minute, 0)
+        let unNext = try XCTUnwrap(
+            trigger.nextTriggerDate(), "UN returned nil for monthly:29 trigger")
+        let policyNext = try XCTUnwrap(
+            Calendar.current.nextDate(
+                after: Date(), matching: comps,
+                matchingPolicy: .nextTimePreservingSmallerComponents),
+            "Calendar returned nil for live monthly:29")
+        XCTAssertEqual(
+            unNext.timeIntervalSince(policyNext), 0, accuracy: 90,
+            "UN's matching policy diverged from .nextTimePreservingSmallerComponents")
     }
 
     func testMonthlyZeroRejected() {

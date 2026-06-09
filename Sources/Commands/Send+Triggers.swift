@@ -203,11 +203,22 @@ extension Send {
     /// users who type `daily:09:00` almost always mean "9am wherever I
     /// am" rather than 9am UTC.
     ///
-    /// `monthly:31:HH:MM` is accepted at parse time but only fires on
-    /// months that have a 31st — UN silently skips months where the
-    /// day-of-month doesn't exist. Worth documenting; not worth
-    /// rejecting since 31 is a perfectly reasonable choice for January
-    /// / March / etc.
+    /// `monthly:31:HH:MM` (and `:29`/`:30`) is accepted at parse time,
+    /// but beware: `UNCalendarNotificationTrigger` does NOT skip months
+    /// that lack the requested day-of-month. Verified on macOS 26.5,
+    /// UN resolves a non-existent date (e.g. "June 31") using the
+    /// `.nextTimePreservingSmallerComponents` matching policy, which
+    /// rolls the fire FORWARD to the 1st of the following month rather
+    /// than skipping to the next 31-day month. So `monthly:31` during a
+    /// 30-day month fires on the 1st, not the 31st; `monthly:29` in a
+    /// non-leap February fires on March 1st. UN owns the recurrence
+    /// after `add(_:)` (this CLI schedules-and-exits, see `Send.swift`),
+    /// and the trigger API does not expose the matching policy, so this
+    /// behavior cannot be corrected here — `Calendar.nextDate(...,
+    /// matchingPolicy: .strict)` is what *would* skip, but UN won't use
+    /// it. We accept the values rather than reject them (days 1..28 are
+    /// always safe; 29..31 are useful when the user knows the rollover
+    /// rule), and document the surprise here and in the `--repeat` help.
     ///
     /// The returned `DateComponents` carries an explicit Gregorian
     /// calendar. `UNCalendarNotificationTrigger` resolves the

@@ -201,6 +201,17 @@ Recurring calendar schedule. Forms:
 .BR "weekly:DAY:HH:MM" ,
 .BR "monthly:D:HH:MM" .
 Times are interpreted in the system's current local timezone.
+For
+.B monthly
+with
+.I D
+in 29..31, a month that lacks that day-of-month does not skip to the
+next matching month: the notification fires on the 1st of the
+following month instead (a framework behavior of
+.B UNCalendarNotificationTrigger
+that cannot be overridden). Use
+.I D
+in 1..28 for the same calendar day every month.
 Mutually exclusive with
 .B --in
 and

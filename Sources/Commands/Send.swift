@@ -128,7 +128,7 @@ struct Send: AsyncParsableCommand {
 
     @Option(
         name: .customLong("repeat"),
-        help: "Schedule the notification to fire on a recurring calendar pattern. Accepted forms: 'hourly' (top of every hour); 'daily:HH:MM' (every day at HH:MM, 24-hour); 'weekly:DAY:HH:MM' (every week on DAY ∈ mon|tue|wed|thu|fri|sat|sun at HH:MM); 'monthly:D:HH:MM' (every month on day D ∈ 1..31 at HH:MM). Times are interpreted in the system's current local time zone. Mutually exclusive with --in and --at."
+        help: "Schedule the notification to fire on a recurring calendar pattern. Accepted forms: 'hourly' (top of every hour); 'daily:HH:MM' (every day at HH:MM, 24-hour); 'weekly:DAY:HH:MM' (every week on DAY ∈ mon|tue|wed|thu|fri|sat|sun at HH:MM); 'monthly:D:HH:MM' (every month on day D ∈ 1..31 at HH:MM). Times are interpreted in the system's current local time zone. Note: for D ∈ 29..31, months that lack that day do NOT skip — the notification fires on the 1st of the following month instead (e.g. monthly:31 in a 30-day month fires on the 1st). This is the macOS UserNotifications framework's behavior and cannot be changed for a repeating trigger. Use D ≤ 28 if you need it to land on the same day every month. Mutually exclusive with --in and --at."
     )
     var scheduleRepeat: String?
 
