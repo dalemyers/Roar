@@ -50,7 +50,7 @@ cask "roar" do
   # cask declaration surfaces the requirement at install time so
   # users on older systems get a clear error rather than a silent
   # post-install failure when the .app refuses to start.
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   # Install the .app to /Applications. Cask handles the move
   # idempotently — re-installs replace the existing copy.
