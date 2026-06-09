@@ -161,15 +161,26 @@ Grammar is strict: `<number><unit>` where unit is `s` / `m` / `h` /
 Min 1s, max 365d. The error message says exactly which constraint
 fired.
 
-## "`--repeat monthly:31:..` doesn't fire some months"
+## "`--repeat monthly:31:..` fires on the 1st some months"
 
-macOS silently skips months without that day-of-month — February,
-April, June, September, November don't have a 31st. The recurring
-trigger uses the framework's `UNCalendarNotificationTrigger`, which
-matches "the 31st of every month" against the calendar's actual
-day-of-month field. There's no "last day of month" semantics
-exposed; if you need that, schedule separate `daily:HH:MM` runs
-or post once per month from cron.
+For a month without that day-of-month — February, April, June,
+September, November have no 31st — macOS does **not** skip to the
+next month that has a 31st. It fires on the **1st of the following
+month** instead. So `monthly:31` during a 30-day month delivers on
+the 1st, and `monthly:29` in a non-leap February delivers on March
+1st.
+
+This is the `UNCalendarNotificationTrigger` framework's behavior:
+it resolves a non-existent date (e.g. "June 31") with the
+`.nextTimePreservingSmallerComponents` matching policy, which rolls
+forward to the start of the next month rather than skipping ahead to
+the next matching day. The trigger API does not expose the matching
+policy, so Roar cannot change this.
+
+If you need it to land on the same calendar day every month, use a
+day that every month has: `D` in `1..28`. There's no "last day of
+month" semantics exposed; if you need that, schedule separate
+`daily:HH:MM` runs or post once per month from cron.
 
 ## "My `--attachment` was rejected"
 

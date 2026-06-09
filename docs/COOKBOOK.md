@@ -125,8 +125,11 @@ the schedule, or until you cancel it via `roar clear --pending`
 pending). The two are mutually exclusive — pick one. Days-of-week
 are `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` (any case; lowercase
 shown here for consistency). HH is 0..23 (24-hour), MM is 0..59.
-`monthly:31:...` is allowed — months without a 31st are silently
-skipped by the framework.
+`monthly:31:...` is allowed, but for a day that a given month
+doesn't have (the 31st of a 30-day month, the 29th of a non-leap
+February) the framework fires on the **1st of the following month**
+rather than skipping it. Use `D` in `1..28` if you need the same
+calendar day every month.
 
 ## Click handlers
 

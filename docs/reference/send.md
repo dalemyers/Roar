@@ -281,12 +281,17 @@ Fire on a recurring calendar pattern. Accepted shapes:
 | `hourly` | At minute 0 of every hour |
 | `daily:HH:MM` | Every day at HH:MM (24-hour, local) |
 | `weekly:DAY:HH:MM` | Every week on DAY at HH:MM |
-| `monthly:D:HH:MM` | Every month on day D at HH:MM |
+| `monthly:D:HH:MM` | Every month on day D at HH:MM (see rollover note for D > 28) |
 
 `DAY` is one of `mon|tue|wed|thu|fri|sat|sun` (case-insensitive,
-locale-stable). `D` is `1..31`. **`monthly:31:*` is accepted but
-silently skips months with fewer than 31 days** — UN's
-documented behaviour.
+locale-stable). `D` is `1..31`. **`monthly:31:*` is accepted, but
+for a month without that day-of-month the notification fires on the
+1st of the *following* month — it does not skip to the next month
+that has a 31st.** Verified on macOS 26.5: `UNCalendarNotificationTrigger`
+resolves the non-existent date with the
+`.nextTimePreservingSmallerComponents` matching policy, and the
+trigger API does not expose the policy, so this cannot be changed.
+Use `D` in `1..28` if you need the same calendar day every month.
 
 ```sh
 roar send --title "Standup" --body "Meeting in 5 min" --repeat 'weekly:mon:09:00'
