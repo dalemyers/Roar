@@ -33,7 +33,7 @@ cask "roar" do
   # would fail Gatekeeper on first launch.
   url "https://github.com/dalemyers/Roar/releases/download/v#{version}/roar-#{version}.app.zip"
   name "Roar"
-  desc "Post macOS notifications from the shell, with click handlers and --wait"
+  desc "Post user notifications from the shell, with click handlers and --wait"
   homepage "https://github.com/dalemyers/Roar"
 
   # `livecheck` lets `brew livecheck roar` and `brew bump-cask-pr`
@@ -55,7 +55,6 @@ cask "roar" do
   # Install the .app to /Applications. Cask handles the move
   # idempotently — re-installs replace the existing copy.
   app "Roar.app"
-
   # Symlink the embedded CLI binary onto Homebrew's bin path so
   # `roar` works from any shell without the user having to add
   # `/Applications/Roar.app/Contents/MacOS` to PATH.
@@ -66,7 +65,6 @@ cask "roar" do
   # symlink, not a wrapper script, so future updates of the .app
   # are picked up without re-running the cask.
   binary "#{appdir}/Roar.app/Contents/MacOS/roar"
-
   # Install the man page from inside the .app bundle into
   # Homebrew's manpath. The .app build phase
   # (`project.yml`'s copyFiles directive) lands `man/roar.1`
