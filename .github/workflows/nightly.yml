@@ -31,9 +31,52 @@ permissions:
   contents: read
 
 jobs:
+  # Gate the nightly on there being new work on `main` since the
+  # previous scheduled tick. A scheduled run fires every day whether
+  # or not anything changed; without this guard, an untouched repo
+  # burns a full macOS build + test run (and any resulting failure
+  # noise) every night for no signal. `workflow_dispatch` bypasses
+  # the guard so a maintainer can always force a run.
+  changes:
+    name: Check for changes on main
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          # Need at least two days of history to tell whether any
+          # commit landed within the last 24h window.
+          fetch-depth: 0
+
+      - name: Check for commits in the last 24 hours
+        id: check
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Manual dispatch — skipping change detection."
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          LATEST=$(git log -1 --format=%ct main)
+          NOW=$(date +%s)
+          AGE=$(( NOW - LATEST ))
+          echo "Most recent commit on main is ${AGE}s old."
+          if (( AGE < 86400 )); then
+            echo "New commits within the last 24h — running nightly."
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No new commits on main in the last 24h — skipping nightly."
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   test:
     name: Build & test (nightly)
     runs-on: macos-latest
+    needs: changes
+    if: needs.changes.outputs.has_changes == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
