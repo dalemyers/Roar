@@ -44,7 +44,7 @@ jobs:
       has_changes: ${{ steps.check.outputs.has_changes }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: main
           # Need at least two days of history to tell whether any
@@ -79,7 +79,7 @@ jobs:
     if: needs.changes.outputs.has_changes == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # `main` only — nightly checks the public tip, not
           # whatever branch was active last. Default checkout
